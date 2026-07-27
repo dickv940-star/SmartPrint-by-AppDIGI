@@ -1,62 +1,293 @@
 /*
 =========================================================
-RAWbt by AppDIGI
-Printer Manager v1.0
+SmartPrint by AppDIGI
+Printer Manager v2.0
 =========================================================
 */
 
 "use strict";
 
+
 const Printer = {
 
-    language: "ESC",
 
-    paperWidth: 576,
+language:"ESC",
 
-    dpi: 203,
+paperWidth:576,
 
-    copies: 1,
+dpi:203,
 
-    async printCanvas(canvas){
+copies:1,
 
-        switch(this.language){
+connected:false,
 
-            case "ESC":
-                return ESCPrinter.print(canvas);
 
-            case "TSPL":
-                return TSPLPrinter.print(canvas);
 
-            case "ZPL":
-                return ZPLPrinter.print(canvas);
 
-            case "CPCL":
-                return CPCLPrinter.print(canvas);
 
-            default:
+// =================================
+// CONNECT
+// =================================
 
-                console.error("Printer language not supported");
+async connect(){
 
-        }
 
-    },
+try{
 
-    setLanguage(lang){
 
-        this.language=lang;
+await Bluetooth.connect();
 
-    },
 
-    setPaper(width){
+this.connected=true;
 
-        this.paperWidth=width;
 
-    },
+console.log(
+"Printer Connected"
+);
 
-    setDPI(dpi){
 
-        this.dpi=dpi;
+return true;
 
-    }
+
+}
+
+catch(error){
+
+
+console.error(
+"Printer Connect Error",
+error
+);
+
+
+this.connected=false;
+
+
+throw error;
+
+
+}
+
+
+},
+
+
+
+
+
+
+
+// =================================
+// DISCONNECT
+// =================================
+
+disconnect(){
+
+
+if(
+Bluetooth.disconnect
+){
+
+
+Bluetooth.disconnect();
+
+
+}
+
+
+this.connected=false;
+
+
+},
+
+
+
+
+
+
+
+// =================================
+// PRINT
+// =================================
+
+
+async print(canvas){
+
+
+
+if(!this.connected){
+
+
+throw new Error(
+"Printer belum terhubung"
+);
+
+
+}
+
+
+
+
+
+let result;
+
+
+
+switch(this.language){
+
+
+
+case "ESC":
+
+
+result =
+await ESCpos.print(
+canvas,
+this
+);
+
+
+break;
+
+
+
+
+
+case "TSPL":
+
+
+result =
+await TSPL.print(
+canvas,
+this
+);
+
+
+break;
+
+
+
+
+
+case "ZPL":
+
+
+result =
+await ZPL.print(
+canvas,
+this
+);
+
+
+break;
+
+
+
+
+
+case "CPCL":
+
+
+result =
+await CPCL.print(
+canvas,
+this
+);
+
+
+break;
+
+
+
+
+
+default:
+
+
+throw new Error(
+"Printer language tidak didukung"
+);
+
+
+
+}
+
+
+
+
+
+
+return result;
+
+
+},
+
+
+
+
+
+
+
+// =================================
+// SETTING
+// =================================
+
+
+setLanguage(lang){
+
+
+this.language =
+lang;
+
+
+},
+
+
+
+
+
+setPaper(width){
+
+
+this.paperWidth =
+width;
+
+
+},
+
+
+
+
+
+setDPI(dpi){
+
+
+this.dpi =
+dpi;
+
+
+},
+
+
+
+
+
+
+setCopies(num){
+
+
+this.copies =
+num;
+
+
+}
+
+
 
 };
+
+
+
+
+
+window.Printer = Printer;
