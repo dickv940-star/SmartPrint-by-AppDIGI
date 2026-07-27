@@ -1,223 +1,493 @@
 /*
 =========================================================
-RAWbt by AppDIGI
-Preview Engine v1.0
+SmartPrint by AppDIGI
+Preview Engine v2.0
 =========================================================
 */
 
+
 "use strict";
+
 
 const Preview = {
 
-    canvas: null,
-    ctx: null,
 
-    scale: 1,
-    rotation: 0,
+canvas:null,
 
-    posX: 0,
-    posY: 0,
+ctx:null,
 
-    dragging: false,
 
-    image: null,
+image:null,
 
-    init() {
 
-        this.canvas = document.createElement("canvas");
+scale:1,
 
-        this.canvas.id = "previewCanvas";
+rotation:0,
 
-        this.ctx = this.canvas.getContext("2d");
 
-        document
-            .getElementById("preview")
-            .appendChild(this.canvas);
+posX:0,
 
-        this.bind();
+posY:0,
 
-    },
 
-    bind() {
+dragging:false,
 
-        this.canvas.addEventListener("mousedown", e => {
 
-            this.dragging = true;
 
-            this.startX = e.clientX;
 
-            this.startY = e.clientY;
 
-        });
+init(){
 
-        window.addEventListener("mouseup", () => {
 
-            this.dragging = false;
+this.canvas =
+document.createElement("canvas");
 
-        });
 
-        window.addEventListener("mousemove", e => {
+this.canvas.id =
+"previewCanvas";
 
-            if (!this.dragging) return;
 
-            this.posX += e.clientX - this.startX;
+this.ctx =
+this.canvas.getContext("2d");
 
-            this.posY += e.clientY - this.startY;
 
-            this.startX = e.clientX;
 
-            this.startY = e.clientY;
+const area =
+document.getElementById(
+"preview"
+);
 
-            this.render();
 
-        });
+if(area){
 
-    },
+area.innerHTML="";
 
-    loadImage(file) {
+area.appendChild(
+this.canvas
+);
 
-        const img = new Image();
+}
 
-        img.onload = () => {
 
-            this.image = img;
 
-            this.fit();
+this.updateSize();
 
-        };
 
-        img.src = URL.createObjectURL(file);
+this.bind();
 
-    },
 
-    fit() {
 
-        if (!this.image) return;
+},
 
-        this.scale = Math.min(
 
-            700 / this.image.width,
 
-            900 / this.image.height
 
-        );
 
-        this.posX = 0;
 
-        this.posY = 0;
 
-        this.rotation = 0;
+// ==========================
+// SIZE FROM SETTINGS
+// ==========================
 
-        this.render();
 
-    },
+updateSize(){
 
-    zoomIn() {
 
-        this.scale *= 1.1;
+if(
+typeof Settings !== "undefined"
+){
 
-        this.render();
 
-    },
+this.canvas.width =
+Settings.get(
+"canvasWidth"
+);
 
-    zoomOut() {
 
-        this.scale *= 0.9;
+this.canvas.height =
+Settings.get(
+"canvasHeight"
+);
 
-        this.render();
 
-    },
 
-    reset() {
+}
 
-        this.scale = 1;
+else{
 
-        this.rotation = 0;
 
-        this.posX = 0;
+this.canvas.width=576;
 
-        this.posY = 0;
+this.canvas.height=800;
 
-        this.render();
 
-    },
+}
 
-    rotateLeft() {
 
-        this.rotation -= 90;
 
-        this.render();
+},
 
-    },
 
-    rotateRight() {
 
-        this.rotation += 90;
 
-        this.render();
 
-    },
 
-    render() {
 
-        if (!this.image) return;
+bind(){
 
-        const w = this.image.width;
 
-        const h = this.image.height;
 
-        this.canvas.width = 900;
+this.canvas.addEventListener(
+"mousedown",
+e=>{
 
-        this.canvas.height = 900;
 
-        this.ctx.clearRect(
+this.dragging=true;
 
-            0,
 
-            0,
+this.startX=e.clientX;
 
-            this.canvas.width,
+this.startY=e.clientY;
 
-            this.canvas.height
 
-        );
+});
 
-        this.ctx.save();
 
-        this.ctx.translate(
 
-            this.canvas.width / 2 + this.posX,
 
-            this.canvas.height / 2 + this.posY
 
-        );
 
-        this.ctx.rotate(
+window.addEventListener(
+"mouseup",
+()=>{
 
-            this.rotation * Math.PI / 180
 
-        );
+this.dragging=false;
 
-        this.ctx.scale(
 
-            this.scale,
+});
 
-            this.scale
 
-        );
 
-        this.ctx.drawImage(
 
-            this.image,
 
-            -w / 2,
 
-            -h / 2
 
-        );
+window.addEventListener(
+"mousemove",
+e=>{
 
-        this.ctx.restore();
 
-    }
+if(!this.dragging)
+return;
+
+
+
+this.posX +=
+e.clientX-this.startX;
+
+
+this.posY +=
+e.clientY-this.startY;
+
+
+
+this.startX=e.clientX;
+
+this.startY=e.clientY;
+
+
+
+this.render();
+
+
+
+});
+
+
+
+},
+
+
+
+
+
+
+
+// ==========================
+// LOAD IMAGE
+// ==========================
+
+
+loadImage(file){
+
+
+
+const img =
+new Image();
+
+
+
+img.onload=()=>{
+
+
+this.image=img;
+
+
+this.fit();
+
 
 };
+
+
+
+img.src =
+URL.createObjectURL(file);
+
+
+
+},
+
+
+
+
+
+
+
+fit(){
+
+
+if(!this.image)
+return;
+
+
+
+let cw =
+this.canvas.width;
+
+
+let ch =
+this.canvas.height;
+
+
+
+this.scale =
+Math.min(
+
+cw / this.image.width,
+
+ch / this.image.height
+
+);
+
+
+
+this.posX=0;
+
+this.posY=0;
+
+this.rotation=0;
+
+
+
+this.render();
+
+
+
+},
+
+
+
+
+
+
+
+zoomIn(){
+
+
+this.scale*=1.1;
+
+this.render();
+
+
+},
+
+
+
+
+
+
+zoomOut(){
+
+
+this.scale*=0.9;
+
+this.render();
+
+
+},
+
+
+
+
+
+
+
+rotateLeft(){
+
+
+this.rotation-=90;
+
+this.render();
+
+
+},
+
+
+
+
+
+
+rotateRight(){
+
+
+this.rotation+=90;
+
+this.render();
+
+
+},
+
+
+
+
+
+
+
+reset(){
+
+
+this.fit();
+
+
+},
+
+
+
+
+
+
+
+render(){
+
+
+
+if(!this.image)
+return;
+
+
+
+
+this.ctx.clearRect(
+
+0,
+
+0,
+
+this.canvas.width,
+
+this.canvas.height
+
+);
+
+
+
+
+
+this.ctx.save();
+
+
+
+this.ctx.translate(
+
+this.canvas.width/2 + this.posX,
+
+this.canvas.height/2 + this.posY
+
+);
+
+
+
+
+
+this.ctx.rotate(
+
+this.rotation *
+Math.PI / 180
+
+);
+
+
+
+
+
+this.ctx.scale(
+
+this.scale,
+
+this.scale
+
+);
+
+
+
+
+
+this.ctx.drawImage(
+
+this.image,
+
+-this.image.width/2,
+
+-this.image.height/2
+
+);
+
+
+
+
+
+this.ctx.restore();
+
+
+
+},
+
+
+
+
+
+
+
+// ==========================
+// SEND TO PRINTER
+// ==========================
+
+
+getCanvas(){
+
+
+return this.canvas;
+
+
+}
+
+
+
+};
+
+
+
+
+
+window.Preview = Preview;
