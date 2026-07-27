@@ -1,190 +1,396 @@
 /*
 =========================================================
-RAWbt by AppDIGI
-Settings Manager v1.0
+SmartPrint by AppDIGI
+Settings Manager v2.0
 =========================================================
 */
 
+
 "use strict";
+
 
 const Settings = {
 
-    key: "RAWBT_SETTINGS",
 
-    data: {
+key:"SMARTPRINT_SETTINGS",
 
-        /* =========================
-           APP
-        ========================= */
 
-        appName: "RAWbt by AppDIGI",
 
-        version: "4.0.0",
+data:{
 
-        language: "id",
 
-        theme: "yellow",
+appName:"SmartPrint by AppDIGI",
 
-        darkMode: false,
+version:"4.0.0",
 
-        autoSave: true,
+language:"id",
 
-        /* =========================
-           PRINTER
-        ========================= */
 
-        printerName: "",
+theme:"blue",
 
-        printerType: "ESC",
+darkMode:false,
 
-        paperWidth: 80,
+autoSave:true,
 
-        paperHeight: 150,
 
-        dpi: 203,
 
-        copies: 1,
 
-        density: 8,
+// =================
+// PRINTER
+// =================
 
-        speed: 4,
 
-        cutPaper: false,
+printerName:"",
 
-        openDrawer: false,
+printLanguage:"ESC",
 
-        autoConnect: true,
 
-        /* =========================
-           LABEL
-        ========================= */
+paperWidth:80,
 
-        labelWidth: 100,
+paperHeight:150,
 
-        labelHeight: 150,
 
-        gap: 2,
+canvasWidth:576,
 
-        marginLeft: 0,
+canvasHeight:1200,
 
-        marginTop: 0,
 
-        rotate: 0,
+dpi:203,
 
-        /* =========================
-           PREVIEW
-        ========================= */
 
-        zoom: 1,
+copies:1,
 
-        fitScreen: true,
 
-        showGrid: false,
+density:8,
 
-        showRuler: true,
 
-        snapToGrid: true,
+speed:4,
 
-        /* =========================
-           BARCODE
-        ========================= */
 
-        barcodeType: "CODE128",
+cutPaper:false,
 
-        barcodeWidth: 2,
 
-        barcodeHeight: 80,
+openDrawer:false,
 
-        barcodeText: true,
 
-        /* =========================
-           QR CODE
-        ========================= */
+autoConnect:true,
 
-        qrSize: 200,
 
-        qrMargin: 2,
 
-        qrCorrection: "M"
 
-    },
+// =================
+// LABEL
+// =================
 
-    load() {
 
-        const json = localStorage.getItem(this.key);
+labelWidth:100,
 
-        if (!json) {
+labelHeight:150,
 
-            this.save();
+gap:2,
 
-            return;
 
-        }
+marginLeft:0,
 
-        try {
+marginTop:0,
 
-            this.data = JSON.parse(json);
 
-        } catch (e) {
+rotate:0,
 
-            console.error(e);
 
-            this.save();
 
-        }
 
-    },
+// =================
+// PREVIEW
+// =================
 
-    save() {
 
-        localStorage.setItem(
+zoom:1,
 
-            this.key,
 
-            JSON.stringify(this.data)
+fitScreen:true,
 
-        );
 
-    },
+showGrid:false,
 
-    reset() {
 
-        localStorage.removeItem(this.key);
+showRuler:true,
 
-        location.reload();
 
-    },
+snapToGrid:true,
 
-    get(name) {
 
-        return this.data[name];
 
-    },
 
-    set(name, value) {
+// =================
+// BARCODE
+// =================
 
-        this.data[name] = value;
 
-        this.save();
+barcodeType:"CODE128",
 
-    },
+barcodeWidth:2,
 
-    toggleDarkMode() {
+barcodeHeight:80,
 
-        this.data.darkMode = !this.data.darkMode;
+barcodeText:true,
 
-        this.save();
 
-    },
 
-    setTheme(theme) {
 
-        this.data.theme = theme;
+// =================
+// QR
+// =================
 
-        this.save();
 
-    }
+qrSize:200,
+
+qrMargin:2,
+
+qrCorrection:"M"
+
+
+},
+
+
+
+
+
+
+
+load(){
+
+
+
+const json =
+localStorage.getItem(
+this.key
+);
+
+
+
+if(json){
+
+
+try{
+
+
+this.data =
+JSON.parse(json);
+
+
+}
+
+
+catch(e){
+
+
+console.error(e);
+
+
+this.save();
+
+
+}
+
+
+
+}
+
+else{
+
+
+this.save();
+
+
+}
+
+
+
+
+},
+
+
+
+
+
+
+
+save(){
+
+
+
+localStorage.setItem(
+
+this.key,
+
+JSON.stringify(this.data)
+
+);
+
+
+
+},
+
+
+
+
+
+
+
+
+get(name){
+
+
+return this.data[name];
+
+
+},
+
+
+
+
+
+
+
+
+set(name,value){
+
+
+this.data[name]=value;
+
+
+this.save();
+
+
+
+this.sync();
+
+
+},
+
+
+
+
+
+
+
+sync(){
+
+
+
+if(
+window.Printer
+){
+
+
+
+Printer.setLanguage(
+
+this.data.printLanguage
+
+);
+
+
+
+Printer.setPaper(
+
+this.data.canvasWidth
+
+);
+
+
+
+Printer.setDPI(
+
+this.data.dpi
+
+);
+
+
+
+Printer.setCopies(
+
+this.data.copies
+
+);
+
+
+
+}
+
+
+
+},
+
+
+
+
+
+
+
+reset(){
+
+
+
+localStorage.removeItem(
+this.key
+);
+
+
+location.reload();
+
+
+
+},
+
+
+
+
+
+
+
+toggleDarkMode(){
+
+
+
+this.data.darkMode =
+!this.data.darkMode;
+
+
+this.save();
+
+
+
+},
+
+
+
+
+
+
+
+setTheme(theme){
+
+
+
+this.data.theme =
+theme;
+
+
+this.save();
+
+
+}
+
+
 
 };
 
+
+
+
+
 Settings.load();
+
+Settings.sync();
