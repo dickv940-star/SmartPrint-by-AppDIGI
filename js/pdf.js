@@ -1,13 +1,13 @@
 /*
 =========================================================
-RAWbt by AppDIGI
-PDF Engine v1.0
+SmartPrint by AppDIGI
+PDF Engine v2.0
 =========================================================
 */
 
 "use strict";
 
-const PDFViewer = {
+const PDFEngine = {
 
     pdf: null,
 
@@ -19,33 +19,32 @@ const PDFViewer = {
 
     rotation: 0,
 
-    canvas: null,
+    async load(file){
 
-    ctx: null,
+        try{
 
-    async init(){
+            const buffer = await file.arrayBuffer();
 
-        this.canvas=document.getElementById("previewCanvas");
+            this.pdf = await pdfjsLib
+                .getDocument({
+                    data: buffer
+                }).promise;
 
-        this.ctx=this.canvas.getContext("2d");
+            this.totalPages = this.pdf.numPages;
 
-    },
+            this.page = 1;
 
-    async open(file){
+            await this.render();
 
-        const data=await file.arrayBuffer();
+        }
 
-        this.pdf=await pdfjsLib.getDocument({
+        catch(e){
 
-            data:data
+            console.error(e);
 
-        }).promise;
+            alert("Gagal membuka PDF");
 
-        this.totalPages=this.pdf.numPages;
-
-        this.page=1;
-
-        this.render();
+        }
 
     },
 
@@ -53,13 +52,9 @@ const PDFViewer = {
 
         if(!this.pdf) return;
 
-        const page=
+        const page = await this.pdf.getPage(this.page);
 
-        await this.pdf.getPage(this.page);
-
-        const viewport=
-
-        page.getViewport({
+        const viewport = page.getViewport({
 
             scale:this.zoom,
 
@@ -67,98 +62,80 @@ const PDFViewer = {
 
         });
 
-        this.canvas.width=
+        const canvas = document.createElement("canvas");
 
-        viewport.width;
+        canvas.width = viewport.width;
 
-        this.canvas.height=
+        canvas.height = viewport.height;
 
-        viewport.height;
+        const ctx = canvas.getContext("2d");
 
         await page.render({
 
-            canvasContext:this.ctx,
+            canvasContext:ctx,
 
             viewport:viewport
 
         }).promise;
 
+        Preview.setCanvas(canvas);
+
     },
 
-    next(){
+    async next(){
 
-        if(this.page>=this.totalPages)
-
-            return;
+        if(this.page>=this.totalPages) return;
 
         this.page++;
 
-        this.render();
+        await this.render();
 
     },
 
-    prev(){
+    async prev(){
 
-        if(this.page<=1)
-
-            return;
+        if(this.page<=1) return;
 
         this.page--;
 
-        this.render();
+        await this.render();
 
     },
 
-    zoomIn(){
+    async zoomIn(){
 
-        this.zoom+=0.2;
+        this.zoom += 0.2;
 
-        this.render();
-
-    },
-
-    zoomOut(){
-
-        if(this.zoom<=0.4)
-
-            return;
-
-        this.zoom-=0.2;
-
-        this.render();
+        await this.render();
 
     },
 
-    rotateLeft(){
+    async zoomOut(){
 
-        this.rotation-=90;
+        if(this.zoom<=0.4) return;
 
-        this.render();
+        this.zoom -= 0.2;
 
-    },
-
-    rotateRight(){
-
-        this.rotation+=90;
-
-        this.render();
+        await this.render();
 
     },
 
-    fitWidth(){
+    async rotateLeft(){
 
-        this.zoom=1;
+        this.rotation -= 90;
 
-        this.render();
+        await this.render();
 
     },
 
-    fitHeight(){
+    async rotateRight(){
 
-        this.zoom=0.8;
+        this.rotation += 90;
 
-        this.render();
+        await this.render();
 
     }
 
 };
+
+window.PDFEngine = PDFEngine;
