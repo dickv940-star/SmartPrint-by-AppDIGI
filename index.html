@@ -4,271 +4,400 @@
 <head>
 
 <meta charset="UTF-8">
+
 <meta name="viewport"
 content="width=device-width, initial-scale=1.0">
 
-<title>RAWbt by AppDIGI</title>
+<title>SmartPrint by AppDIGI</title>
+
 
 <link rel="manifest" href="manifest.json">
 
+<meta name="theme-color" content="#2563eb">
+
+
+<link rel="icon" href="assets/logo.png">
+
+
 <link rel="stylesheet" href="css/style.css">
+
 <link rel="stylesheet" href="css/responsive.css">
+
 
 </head>
 
+
 <body>
+
 
 <header class="topbar">
 
+
 <div class="logo-area">
 
-<img src="assets/logo.png"
-id="logo">
+<img src="assets/logo.png" id="logo">
+
 
 <div>
 
-<h1>RAWbt</h1>
+<h1>SmartPrint</h1>
 
 <span>by AppDIGI</span>
 
 </div>
 
+
 </div>
+
+
 
 <div class="status">
 
 <span class="dot"></span>
 
 <span id="printerStatus">
-
 No Printer
-
 </span>
 
 </div>
 
+
 </header>
+
+
+
 
 <div class="container">
 
+
+
 <aside class="sidebar">
 
-<button class="menu active">
+
+<button class="menu active" id="homeBtn">
 
 🏠 Home
 
 </button>
 
-<button class="menu">
 
-📄 Print
+
+<button class="menu" id="fileBtn">
+
+📄 File
 
 </button>
 
-<button class="menu">
+
+
+<button class="menu" id="labelBtn">
 
 🏷 Label
 
 </button>
 
-<button class="menu">
+
+
+<button class="menu" id="barcodeBtn">
 
 📊 Barcode
 
 </button>
 
-<button class="menu">
+
+
+<button class="menu" id="qrBtn">
 
 ⬛ QR Code
 
 </button>
 
-<button class="menu">
+
+
+<button class="menu" id="settingBtn">
 
 ⚙ Settings
 
 </button>
 
+
 </aside>
+
+
+
+
+
 
 <main class="workspace">
 
+
+
 <section class="preview-card">
+
 
 <h2>Preview</h2>
 
-<div id="preview">
 
-Drop PDF / Image Here
+
+<div class="toolbar">
+
+
+<button id="zoomOut">
+-
+</button>
+
+
+<span id="zoomValue">
+100%
+</span>
+
+
+<button id="zoomIn">
++
+</button>
+
 
 </div>
 
+
+
+<div id="preview">
+
+
+Drop PDF / Image Here
+
+
+</div>
+
+
+
+<input 
+type="file"
+id="fileInput"
+accept="image/*,.pdf">
+
+
+
 </section>
+
 
 </main>
 
+
+
+
+
+
 <aside class="panel">
+
 
 <h2>Printer</h2>
 
+
+
 <label>
-
-Printer Type
-
+Mode
 </label>
+
+
+<select id="printMode">
+
+<option value="escpos">
+ESC/POS
+</option>
+
+
+<option value="tspl">
+TSPL
+</option>
+
+
+</select>
+
+
+
+
+
+<label>
+Printer Type
+</label>
+
 
 <select id="printerType">
 
-<option>
 
+<option>
 Receipt 58mm
-
 </option>
 
-<option>
 
+<option>
 Receipt 80mm
-
 </option>
+
 
 <option>
-
 Label Printer
-
 </option>
+
 
 </select>
 
+
+
+
+
 <label>
-
 Paper Size
-
 </label>
+
 
 <select id="paperSize">
 
-<option>
 
+<option value="58">
 58mm
-
 </option>
 
-<option>
 
+<option value="80">
 80mm
-
 </option>
 
-<option>
 
+<option>
 40x30 mm
-
 </option>
 
-<option>
 
+<option>
 50x30 mm
-
 </option>
 
-<option>
 
+<option>
 60x40 mm
-
 </option>
+
 
 <option>
-
 80x50 mm
-
 </option>
+
 
 <option selected>
-
 100x150 mm
-
 </option>
+
 
 </select>
 
+
+
+
+
+
 <label>
-
 Density
-
 </label>
 
-<input
+
+<input 
+id="density"
 type="range"
 min="1"
 max="15"
 value="8">
 
+
+
+
+
 <label>
-
 Copies
-
 </label>
 
+
 <input
+id="copies"
 type="number"
-value="1">
+value="1"
+min="1">
+
+
+
+
 
 <div class="buttons">
 
+
 <button id="connectBtn">
 
-Connect Printer
+🔵 Connect Printer
 
 </button>
+
+
+
 
 <button id="printBtn">
 
-Print
+🖨 Print
 
 </button>
 
+
+
 </div>
+
+
 
 </aside>
 
+
 </div>
+
+
+
+
+
 
 <nav class="bottom-nav">
 
-<button>
 
+<button id="navHome">
 🏠
-
 </button>
 
-<button>
 
+<button id="navFile">
 📄
-
 </button>
 
-<button>
 
+<button id="navLabel">
 🏷
-
 </button>
 
-<button>
 
-📊
-
+<button id="navQR">
+⬛
 </button>
 
-<button>
 
+<button id="navSetting">
 ⚙
-
 </button>
+
 
 </nav>
 
-<script src="js/app.js"></script>
-  
+
+
+
+
+<!-- Printer Engine -->
+
 <script src="js/escpos.js"></script>
 
 <script src="js/tspl.js"></script>
@@ -277,7 +406,12 @@ Print
 
 <script src="js/cpcl.js"></script>
 
+
 <script src="js/printer.js"></script>
+
+<script src="js/app.js"></script>
+
+
 </body>
 
 </html>
