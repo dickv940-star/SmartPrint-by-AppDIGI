@@ -21,8 +21,13 @@ const Preview = {
     posY: 0,
 
     dragging: false,
+
     startX: 0,
     startY: 0,
+
+    //-----------------------------------
+    // INIT
+    //-----------------------------------
 
     init() {
 
@@ -33,6 +38,7 @@ const Preview = {
         area.innerHTML = "";
 
         this.canvas = document.createElement("canvas");
+
         this.canvas.id = "previewCanvas";
 
         this.ctx = this.canvas.getContext("2d");
@@ -45,32 +51,43 @@ const Preview = {
 
     },
 
+    //-----------------------------------
+    // UPDATE SIZE
+    //-----------------------------------
+
     updateSize() {
 
-        let w = 800;
-        let h = 1200;
+        let width = 800;
+        let height = 1200;
 
         if (typeof Settings !== "undefined") {
 
-            w = Settings.get("canvasWidth") || 800;
-            h = Settings.get("canvasHeight") || 1200;
+            width = Settings.get("canvasWidth") || 800;
+
+            height = Settings.get("canvasHeight") || 1200;
 
         }
 
-        this.canvas.width = w;
-        this.canvas.height = h;
+        this.canvas.width = width;
+
+        this.canvas.height = height;
 
         this.render();
 
     },
 
+    //-----------------------------------
+    // BIND EVENTS
+    //-----------------------------------
+
     bind() {
 
-        this.canvas.addEventListener("mousedown", e => {
+        this.canvas.addEventListener("mousedown", (e) => {
 
             this.dragging = true;
 
             this.startX = e.clientX;
+
             this.startY = e.clientY;
 
         });
@@ -81,34 +98,60 @@ const Preview = {
 
         });
 
-        window.addEventListener("mousemove", e => {
+        window.addEventListener("mousemove", (e) => {
 
             if (!this.dragging) return;
 
             this.posX += e.clientX - this.startX;
+
             this.posY += e.clientY - this.startY;
 
             this.startX = e.clientX;
+
             this.startY = e.clientY;
 
             this.render();
 
         });
 
-        this.canvas.addEventListener("wheel", e => {
+        this.canvas.addEventListener("wheel", (e) => {
 
             e.preventDefault();
 
-            if (e.deltaY < 0)
+            if (e.deltaY < 0) {
+
                 this.zoomIn();
-            else
+
+            } else {
+
                 this.zoomOut();
+
+            }
 
         });
 
     },
 
+    //-----------------------------------
+    // UPDATE ZOOM LABEL
+    //-----------------------------------
+
+    updateZoomLabel() {
+
+        const zoom = document.getElementById("zoomValue");
+
+        if (!zoom) return;
+
+        zoom.textContent = Math.round(this.scale * 100) + "%";
+
+    },
+        //-----------------------------------
+    // LOAD IMAGE
+    //-----------------------------------
+
     loadImage(file) {
+
+        if (!file) return;
 
         const img = new Image();
 
@@ -122,7 +165,7 @@ const Preview = {
 
         img.onerror = () => {
 
-            alert("Gagal membuka gambar");
+            alert("Gagal membuka gambar.");
 
         };
 
@@ -130,7 +173,13 @@ const Preview = {
 
     },
 
+    //-----------------------------------
+    // SET IMAGE
+    //-----------------------------------
+
     setImage(img) {
+
+        if (!img) return;
 
         this.image = img;
 
@@ -138,7 +187,13 @@ const Preview = {
 
     },
 
+    //-----------------------------------
+    // SET CANVAS (UNTUK PDF)
+    //-----------------------------------
+
     setCanvas(sourceCanvas) {
+
+        if (!sourceCanvas) return;
 
         const img = new Image();
 
@@ -154,6 +209,10 @@ const Preview = {
 
     },
 
+    //-----------------------------------
+    // FIT TO PAGE
+    //-----------------------------------
+
     fit() {
 
         if (!this.image) return;
@@ -161,13 +220,10 @@ const Preview = {
         const cw = this.canvas.width;
         const ch = this.canvas.height;
 
-        this.scale = Math.min(
+        const scaleX = cw / this.image.width;
+        const scaleY = ch / this.image.height;
 
-            cw / this.image.width,
-
-            ch / this.image.height
-
-        ) * 0.95;
+        this.scale = Math.min(scaleX, scaleY) * 0.95;
 
         this.rotation = 0;
 
@@ -176,58 +232,28 @@ const Preview = {
 
         this.render();
 
-    },
-
-    zoomIn() {
-
-        this.scale *= 1.1;
-
-        this.render();
+        this.updateZoomLabel();
 
     },
 
-    zoomOut() {
-
-        this.scale *= 0.9;
-
-        this.render();
-
-    },
-
-    rotateLeft() {
-
-        this.rotation -= 90;
-
-        this.render();
-
-    },
-
-    rotateRight() {
-
-        this.rotation += 90;
-
-        this.render();
-
-    },
-
-    reset() {
-
-        this.fit();
-
-    },
+    //-----------------------------------
+    // CLEAR CANVAS
+    //-----------------------------------
 
     clear() {
 
         this.ctx.clearRect(
-
             0,
             0,
             this.canvas.width,
             this.canvas.height
-
         );
 
     },
+
+    //-----------------------------------
+    // RENDER
+    //-----------------------------------
 
     render() {
 
@@ -240,47 +266,202 @@ const Preview = {
         this.ctx.save();
 
         this.ctx.translate(
-
-            this.canvas.width / 2 + this.posX,
-
-            this.canvas.height / 2 + this.posY
-
+            (this.canvas.width / 2) + this.posX,
+            (this.canvas.height / 2) + this.posY
         );
 
         this.ctx.rotate(
-
             this.rotation * Math.PI / 180
-
         );
 
         this.ctx.scale(
-
             this.scale,
-
             this.scale
-
         );
 
         this.ctx.drawImage(
-
             this.image,
-
             -this.image.width / 2,
-
             -this.image.height / 2
-
         );
 
         this.ctx.restore();
 
     },
+        //-----------------------------------
+    // ZOOM IN
+    //-----------------------------------
+
+    zoomIn() {
+
+        this.scale *= 1.10;
+
+        if (this.scale > 10)
+            this.scale = 10;
+
+        this.render();
+
+        this.updateZoomLabel();
+
+    },
+
+    //-----------------------------------
+    // ZOOM OUT
+    //-----------------------------------
+
+    zoomOut() {
+
+        this.scale *= 0.90;
+
+        if (this.scale < 0.10)
+            this.scale = 0.10;
+
+        this.render();
+
+        this.updateZoomLabel();
+
+    },
+
+    //-----------------------------------
+    // ROTATE LEFT
+    //-----------------------------------
+
+    rotateLeft() {
+
+        this.rotation -= 90;
+
+        this.render();
+
+    },
+
+    //-----------------------------------
+    // ROTATE RIGHT
+    //-----------------------------------
+
+    rotateRight() {
+
+        this.rotation += 90;
+
+        this.render();
+
+    },
+
+    //-----------------------------------
+    // FIT WIDTH
+    //-----------------------------------
+
+    fitWidth() {
+
+        if (!this.image) return;
+
+        this.scale =
+            this.canvas.width / this.image.width;
+
+        this.posX = 0;
+        this.posY = 0;
+
+        this.render();
+
+        this.updateZoomLabel();
+
+    },
+
+    //-----------------------------------
+    // FIT HEIGHT
+    //-----------------------------------
+
+    fitHeight() {
+
+        if (!this.image) return;
+
+        this.scale =
+            this.canvas.height / this.image.height;
+
+        this.posX = 0;
+        this.posY = 0;
+
+        this.render();
+
+        this.updateZoomLabel();
+
+    },
+
+    //-----------------------------------
+    // RESET
+    //-----------------------------------
+
+    reset() {
+
+        this.fit();
+
+    },
+
+    //-----------------------------------
+    // GET IMAGE
+    //-----------------------------------
+
+    getImage() {
+
+        return this.image;
+
+    },
+
+    //-----------------------------------
+    // GET CANVAS
+    //-----------------------------------
 
     getCanvas() {
 
         return this.canvas;
 
+    },
+
+    //-----------------------------------
+    // EXPORT PNG
+    //-----------------------------------
+
+    exportPNG() {
+
+        return this.canvas.toDataURL("image/png");
+
+    },
+
+    //-----------------------------------
+    // EXPORT JPEG
+    //-----------------------------------
+
+    exportJPEG(quality = 0.95) {
+
+        return this.canvas.toDataURL(
+            "image/jpeg",
+            quality
+        );
+
+    },
+
+    //-----------------------------------
+    // CLEAR PREVIEW
+    //-----------------------------------
+
+    clearPreview() {
+
+        this.image = null;
+
+        this.posX = 0;
+        this.posY = 0;
+        this.scale = 1;
+        this.rotation = 0;
+
+        this.clear();
+
+        const zoom = document.getElementById("zoomValue");
+
+        if (zoom)
+            zoom.textContent = "100%";
+
     }
 
 };
 
+// Export
 window.Preview = Preview;
