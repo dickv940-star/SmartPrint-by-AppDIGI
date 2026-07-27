@@ -1,0 +1,203 @@
+/*======================================================
+ RAWbt by AppDIGI v4
+ Theme.css
+======================================================*/
+
+/* =====================================================
+   DEFAULT THEME (YELLOW)
+===================================================== */
+
+body.theme-yellow{
+
+    --primary:#FFC107;
+    --primary-dark:#E0A800;
+
+    --background:#F5F5F5;
+
+    --card:#FFFFFF;
+
+    --text:#1F2937;
+
+    --text-light:#6B7280;
+
+    --border:#E5E7EB;
+
+}
+
+/* =====================================================
+   BLUE
+===================================================== */
+
+body.theme-blue{
+
+    --primary:#2563EB;
+    --primary-dark:#1D4ED8;
+
+}
+
+/* =====================================================
+   GREEN
+===================================================== */
+
+body.theme-green{
+
+    --primary:#16A34A;
+    --primary-dark:#15803D;
+
+}
+
+/* =====================================================
+   RED
+===================================================== */
+
+body.theme-red{
+
+    --primary:#DC2626;
+    --primary-dark:#B91C1C;
+
+}
+
+/* =====================================================
+   BLACK
+===================================================== */
+
+body.theme-black{
+
+    --primary:#111827;
+    --primary-dark:#000000;
+
+}
+
+/* =====================================================
+   DARK MODE
+===================================================== */
+
+body.dark{
+
+    --background:#111827;
+
+    --card:#1F2937;
+
+    --text:#F9FAFB;
+
+    --text-light:#D1D5DB;
+
+    --border:#374151;
+
+}
+
+body.dark .topbar{
+
+    background:var(--primary);
+
+}
+
+body.dark .sidebar{
+
+    background:var(--card);
+
+}
+
+body.dark .panel{
+
+    background:var(--card);
+
+}
+
+body.dark .preview-card{
+
+    background:var(--card);
+
+}
+
+body.dark select,
+body.dark input{
+
+    background:#374151;
+
+    color:#FFF;
+
+    border:1px solid #4B5563;
+
+}
+
+body.dark #preview{
+
+    background:#111827;
+
+    color:#DDD;
+
+    border:2px dashed #4B5563;
+
+}
+
+body.dark .bottom-nav{
+
+    background:#1F2937;
+
+}
+
+body.dark .bottom-nav button{
+
+    color:#FFF;
+
+}
+
+/* =====================================================
+   CARD HOVER
+===================================================== */
+
+.sidebar,
+.panel,
+.preview-card{
+
+    transition:.3s;
+
+}
+
+.sidebar:hover,
+.panel:hover,
+.preview-card:hover{
+
+    transform:translateY(-2px);
+
+}
+
+/* =====================================================
+   BUTTON EFFECT
+===================================================== */
+
+button{
+
+    transition:.25s;
+
+}
+
+button:active{
+
+    transform:scale(.97);
+
+}
+
+/* =====================================================
+   INPUT FOCUS
+===================================================== */
+
+input:focus,
+select:focus{
+
+    box-shadow:0 0 0 3px rgba(255,193,7,.25);
+
+}
+
+/* =====================================================
+   SELECTION
+===================================================== */
+
+::selection{
+
+    background:var(--primary);
+
+    color:#000;
+
+}
