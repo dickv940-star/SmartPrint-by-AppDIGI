@@ -2,155 +2,150 @@
 =================================================
  SmartPrint by AppDIGI
  Service Worker
- Version 1.0
+ Version 2.0
 =================================================
 */
 
-const CACHE_NAME = "smartprint-v1";
+"use strict";
 
+const CACHE_NAME = "smartprint-v2";
 
 const APP_FILES = [
 
-"./",
+    "./",
+    "./index.html",
+    "./manifest.json",
 
-"./index.html",
+    "./css/style.css",
+    "./css/responsive.css",
 
-"./manifest.json",
+    "./js/app.js",
+    "./js/settings.js",
+    "./js/preview.js",
+    "./js/image.js",
+    "./js/pdf.js",
+    "./js/barcode.js",
+    "./js/qrcode.js",
+    "./js/label.js",
+    "./js/bluetooth.js",
+    "./js/printer.js",
+    "./js/escpos.js",
+    "./js/tspl.js",
+    "./js/zpl.js",
+    "./js/cpcl.js",
+    "./js/install.js",
 
+    "./assets/logo.png",
 
-"./css/style.css",
-"./css/responsive.css",
-
-
-"./js/app.js",
-"./js/printer.js",
-"./js/escpos.js",
-"./js/tspl.js",
-"./js/zpl.js",
-"./js/cpcl.js",
-
-
-"./assets/logo.png"
+    "./assets/icons/icon-192.png",
+    "./assets/icons/icon-512.png",
+    "./assets/icons/icon-512-maskable.png"
 
 ];
 
 
-
-
+// ========================================
 // INSTALL
+// ========================================
 
-self.addEventListener(
-"install",
-event => {
+self.addEventListener("install", event => {
 
-console.log(
-"SmartPrint Service Worker Installed"
-);
+    console.log("SmartPrint Service Worker Installed");
 
+    self.skipWaiting();
 
-event.waitUntil(
+    event.waitUntil(
 
-caches.open(CACHE_NAME)
+        caches.open(CACHE_NAME)
 
-.then(cache => {
+        .then(cache => cache.addAll(APP_FILES))
 
-return cache.addAll(APP_FILES);
-
-})
-
-);
-
-
-self.skipWaiting();
-
+    );
 
 });
 
 
-
-
-
-
+// ========================================
 // ACTIVATE
+// ========================================
 
-self.addEventListener(
-"activate",
-event => {
+self.addEventListener("activate", event => {
 
+    console.log("SmartPrint Service Worker Active");
 
-console.log(
-"SmartPrint Service Worker Active"
-);
+    event.waitUntil(
 
+        caches.keys()
 
+        .then(keys =>
 
-event.waitUntil(
+            Promise.all(
 
-caches.keys()
+                keys.map(key => {
 
-.then(keys => {
+                    if (key !== CACHE_NAME) {
 
+                        console.log("Delete Cache :", key);
 
-return Promise.all(
+                        return caches.delete(key);
 
-keys.map(key => {
+                    }
 
+                })
 
-if(
-key !== CACHE_NAME
-){
+            )
 
-return caches.delete(key);
+        )
 
-}
+    );
 
-
-})
-
-);
-
-
-})
-
-
-);
-
-
-
-self.clients.claim();
-
+    self.clients.claim();
 
 });
 
 
+// ========================================
+// FETCH
+// ========================================
 
+self.addEventListener("fetch", event => {
 
+    if (event.request.method !== "GET") return;
 
+    event.respondWith(
 
+        fetch(event.request)
 
-// FETCH CACHE FIRST
+        .then(response => {
 
-self.addEventListener(
-"fetch",
-event => {
+            const clone = response.clone();
 
+            caches.open(CACHE_NAME)
 
-event.respondWith(
+            .then(cache => {
 
+                cache.put(event.request, clone);
 
-caches.match(event.request)
+            });
 
-.then(response => {
+            return response;
 
+        })
 
-return response || fetch(event.request);
+        .catch(() => {
 
+            return caches.match(event.request)
 
-})
+            .then(response => {
 
+                if (response) return response;
 
-);
+                return caches.match("./index.html");
 
+            });
 
+        })
+
+    );
 
 });
