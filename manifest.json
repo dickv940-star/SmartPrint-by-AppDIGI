@@ -2,59 +2,47 @@
   "id": "/SmartPrint-by-AppDIGI/",
   "name": "SmartPrint by AppDIGI",
   "short_name": "SmartPrint",
-  "description": "Universal Bluetooth Thermal Printer untuk mencetak dokumen, gambar, dan PDF langsung dari perangkat.",
+
+  "description": "Universal Bluetooth Thermal Printer untuk mencetak dokumen, gambar, PDF, label, barcode, dan QR Code.",
+
   "lang": "id-ID",
   "dir": "ltr",
 
-  "start_url": "/SmartPrint-by-AppDIGI/",
-  "scope": "/SmartPrint-by-AppDIGI/",
+  "start_url": "./",
+  "scope": "./",
 
   "display": "standalone",
   "orientation": "portrait",
 
-  "theme_color": "#2563eb",
-  "background_color": "#ffffff",
+  "theme_color": "#FFC107",
+  "background_color": "#F5F5F5",
 
   "categories": [
     "productivity",
-    "utilities",
-    "business"
+    "business",
+    "utilities"
   ],
 
   "icons": [
     {
-      "src": "/SmartPrint-by-AppDIGI/logo.png",
+      "src": "assets/logo.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/SmartPrint-by-AppDIGI/logo.png",
+      "src": "assets/logo.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
   ],
 
-  "screenshots": [
-    {
-      "src": "/SmartPrint-by-AppDIGI/screenshot-wide.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide"
-    },
-    {
-      "src": "/SmartPrint-by-AppDIGI/screenshot-mobile.png",
-      "sizes": "390x844",
-      "type": "image/png"
-    }
-  ],
-
   "shortcuts": [
     {
-      "name": "Print Document",
+      "name": "Print File",
       "short_name": "Print",
-      "url": "/SmartPrint-by-AppDIGI/"
+      "url": "./"
     }
   ]
 }
