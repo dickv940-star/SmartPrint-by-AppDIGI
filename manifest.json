@@ -8,13 +8,10 @@
   "scope": "/SmartPrint-by-AppDIGI/",
 
   "display": "standalone",
-
   "orientation": "portrait",
 
   "theme_color": "#2563eb",
   "background_color": "#0f172a",
-
-  "lang": "id-ID",
 
   "icons": [
     {
