@@ -24,16 +24,19 @@ content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="css/responsive.css">
 
 
+
 </head>
 
 
 <body>
 
 
+
 <header class="topbar">
 
 
 <div class="logo-area">
+
 
 <img src="assets/logo.png" id="logo">
 
@@ -67,11 +70,20 @@ No Printer
 
 
 
+
+
+
 <div class="container">
 
 
 
+
+
+
+<!-- SIDEBAR -->
+
 <aside class="sidebar">
+
 
 
 <button class="menu active" id="homeBtn">
@@ -112,15 +124,24 @@ No Printer
 
 </button>
 
+
+
+
 <button class="menu" id="installBtn" hidden>
-    📲 Install SmartPrint
+
+📲 Install SmartPrint
+
 </button>
+
+
+
 
 <button class="menu" id="settingBtn">
 
 ⚙ Settings
 
 </button>
+
 
 
 </aside>
@@ -130,6 +151,11 @@ No Printer
 
 
 
+
+
+
+<!-- MAIN PREVIEW -->
+
 <main class="workspace">
 
 
@@ -137,29 +163,47 @@ No Printer
 <section class="preview-card">
 
 
-<h2>Preview</h2>
+
+<h2>
+Preview
+</h2>
+
 
 
 
 <div class="toolbar">
 
 
+
 <button id="zoomOut">
--
+
+−
+
 </button>
+
 
 
 <span id="zoomValue">
+
 100%
+
 </span>
 
 
+
 <button id="zoomIn">
+
 +
+
 </button>
 
 
+
 </div>
+
+
+
+
 
 
 
@@ -173,14 +217,34 @@ Drop PDF / Image Here
 
 
 
+
+
+
+
+<div class="file-area">
+
+
+<button id="uploadBtn">
+
+📂 Pilih File
+
+</button>
+
+
 <input 
 type="file"
 id="fileInput"
 accept="image/*,.pdf">
 
 
+</div>
+
+
+
+
 
 </section>
+
 
 
 </main>
@@ -190,10 +254,22 @@ accept="image/*,.pdf">
 
 
 
+
+
+
+<!-- PRINTER PANEL -->
+
+
 <aside class="panel">
 
 
-<h2>Printer</h2>
+
+<h2>
+Printer
+</h2>
+
+
+
 
 
 
@@ -202,16 +278,24 @@ Mode
 </label>
 
 
+
 <select id="printMode">
 
+
 <option value="escpos">
+
 ESC/POS
+
 </option>
+
 
 
 <option value="tspl">
+
 TSPL
+
 </option>
+
 
 
 </select>
@@ -220,9 +304,13 @@ TSPL
 
 
 
+
+
 <label>
 Printer Type
 </label>
+
+
 
 
 <select id="printerType">
@@ -249,9 +337,13 @@ Label Printer
 
 
 
+
+
 <label>
 Paper Size
 </label>
+
+
 
 
 <select id="paperSize">
@@ -262,9 +354,11 @@ Paper Size
 </option>
 
 
+
 <option value="80">
 80mm
 </option>
+
 
 
 <option>
@@ -272,9 +366,11 @@ Paper Size
 </option>
 
 
+
 <option>
 50x30 mm
 </option>
+
 
 
 <option>
@@ -282,9 +378,11 @@ Paper Size
 </option>
 
 
+
 <option>
 80x50 mm
 </option>
+
 
 
 <option selected>
@@ -292,7 +390,9 @@ Paper Size
 </option>
 
 
+
 </select>
+
 
 
 
@@ -304,7 +404,8 @@ Density
 </label>
 
 
-<input 
+
+<input
 id="density"
 type="range"
 min="1"
@@ -315,9 +416,13 @@ value="8">
 
 
 
+
+
 <label>
 Copies
 </label>
+
+
 
 
 <input
@@ -330,7 +435,12 @@ min="1">
 
 
 
+
+
 <div class="buttons">
+
+
+
 
 
 <button id="connectBtn">
@@ -338,6 +448,8 @@ min="1">
 🔵 Connect Printer
 
 </button>
+
+
 
 
 
@@ -350,13 +462,22 @@ min="1">
 
 
 
+
+
+
 </div>
+
+
 
 
 
 </aside>
 
 
+
+
+
+
 </div>
 
 
@@ -364,32 +485,52 @@ min="1">
 
 
 
+
+
+
+<!-- MOBILE NAV -->
+
 <nav class="bottom-nav">
 
 
 <button id="navHome">
+
 🏠
+
 </button>
+
 
 
 <button id="navFile">
+
 📄
+
 </button>
+
 
 
 <button id="navLabel">
+
 🏷
+
 </button>
+
 
 
 <button id="navQR">
+
 ⬛
+
 </button>
+
 
 
 <button id="navSetting">
+
 ⚙
+
 </button>
+
 
 
 </nav>
@@ -398,7 +539,11 @@ min="1">
 
 
 
-<!-- Printer Engine -->
+
+
+
+
+<!-- LIBRARY -->
 
 <script src="js/settings.js"></script>
 
@@ -406,16 +551,31 @@ min="1">
 
 <script src="js/image.js"></script>
 
-<!-- PDF Library -->
+
+
+
+
+<!-- PDF JS -->
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
+
 <script>
+
 pdfjsLib.GlobalWorkerOptions.workerSrc =
 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
 </script>
 
-<!-- SmartPrint PDF Engine -->
-<script src="js/pdf.js"></script>
+
+
+
+
+
+<!-- SMARTPRINT ENGINE -->
+
+
+<script src="js/pdf-engine.js"></script>
 
 <script src="js/barcode.js"></script>
 
@@ -434,10 +594,21 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 <script src="js/cpcl.js"></script>
 
 <script src="js/printer.js"></script>
-  
+
+
+
+<!-- PWA INSTALL -->
+
 <script src="js/install.js"></script>
-  
+
+
+
+<!-- APP -->
+
 <script src="js/app.js"></script>
+
+
+
 
 
 </body>
