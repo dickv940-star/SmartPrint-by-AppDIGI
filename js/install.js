@@ -1,153 +1,41 @@
-/*
-=================================================
- SmartPrint by AppDIGI
- PWA Install Engine
- Version 3.0
-=================================================
-*/
-
 "use strict";
 
 let deferredPrompt = null;
 
-document.addEventListener("DOMContentLoaded", () => {
+const installBtn = document.getElementById("installBtn");
 
-    const installBtn = document.getElementById("installBtn");
+window.addEventListener("beforeinstallprompt", (e) => {
 
-    if (!installBtn) {
-        console.warn("Install button tidak ditemukan.");
-        return;
-    }
+    console.log("PWA Install Available");
 
-    // Sembunyikan tombol saat awal
-    installBtn.style.display = "none";
+    e.preventDefault();
 
-    // Jika sudah dijalankan sebagai aplikasi PWA
-    if (
-        window.matchMedia("(display-mode: standalone)").matches ||
-        window.navigator.standalone === true
-    ) {
+    deferredPrompt = e;
 
-        console.log("SmartPrint sudah berjalan sebagai PWA");
-
-        installBtn.innerHTML = "✅ Installed";
-        installBtn.disabled = true;
-        installBtn.style.display = "block";
-
-        return;
-    }
-
-    installBtn.addEventListener("click", async () => {
-
-        console.log("Install Button Click");
-
-        if (!deferredPrompt) {
-
-            alert(
-                "Browser belum mengizinkan instalasi.\n\n" +
-                "Pastikan:\n" +
-                "- Membuka Chrome biasa (bukan Incognito)\n" +
-                "- Service Worker aktif\n" +
-                "- Manifest valid\n" +
-                "- Mengakses melalui HTTPS"
-            );
-
-            return;
-
-        }
-
-        deferredPrompt.prompt();
-
-        const choice = await deferredPrompt.userChoice;
-
-        console.log("Install Result :", choice.outcome);
-
-        if (choice.outcome === "accepted") {
-
-            console.log("User menerima instalasi");
-
-        } else {
-
-            console.log("User membatalkan instalasi");
-
-        }
-
-        deferredPrompt = null;
-
-        installBtn.style.display = "none";
-
-    });
+    installBtn.hidden = false;
 
 });
 
+installBtn.addEventListener("click", async () => {
 
+    if (!deferredPrompt) return;
 
-// =====================================
-// Browser siap meng-install
-// =====================================
+    deferredPrompt.prompt();
 
-window.addEventListener("beforeinstallprompt", (event) => {
+    const { outcome } = await deferredPrompt.userChoice;
 
-    console.log("=========== PWA READY ===========");
+    console.log("Install:", outcome);
 
-    event.preventDefault();
+    deferredPrompt = null;
 
-    deferredPrompt = event;
-
-    const installBtn = document.getElementById("installBtn");
-
-    if (installBtn) {
-
-        installBtn.style.display = "block";
-
-        installBtn.disabled = false;
-
-    }
+    installBtn.hidden = true;
 
 });
-
-
-
-// =====================================
-// Setelah berhasil install
-// =====================================
 
 window.addEventListener("appinstalled", () => {
 
-    console.log("=========== APP INSTALLED ===========");
+    console.log("SmartPrint Installed");
 
-    const installBtn = document.getElementById("installBtn");
-
-    if (installBtn) {
-
-        installBtn.innerHTML = "✅ Installed";
-
-        installBtn.disabled = true;
-
-    }
-
-});
-
-
-
-// =====================================
-// Debug
-// =====================================
-
-window.addEventListener("load", () => {
-
-    console.log("=================================");
-    console.log("SmartPrint Install Engine Ready");
-    console.log("=================================");
-
-    console.log(
-        "Standalone:",
-        window.matchMedia("(display-mode: standalone)").matches
-    );
-
-    console.log(
-        "ServiceWorker:",
-        "serviceWorker" in navigator
-    );
+    installBtn.hidden = true;
 
 });
