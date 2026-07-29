@@ -1,22 +1,11 @@
-window.addEventListener("beforeinstallprompt", (e) => {
-    console.log("✅ beforeinstallprompt FIRED");
-    e.preventDefault();
-    deferredPrompt = e;
-});
-
-window.addEventListener("appinstalled", () => {
-    console.log("✅ APP INSTALLED");
-});
-
-"use strict";
-
-let deferredPrompt = null;
+let deferredPrompt;
 
 const installBtn = document.getElementById("installBtn");
 
-window.addEventListener("beforeinstallprompt", (e) => {
 
-    console.log("PWA Install Available");
+window.addEventListener(
+"beforeinstallprompt",
+(e)=>{
 
     e.preventDefault();
 
@@ -26,26 +15,26 @@ window.addEventListener("beforeinstallprompt", (e) => {
 
 });
 
-installBtn.addEventListener("click", async () => {
 
-    if (!deferredPrompt) return;
+
+installBtn.addEventListener(
+"click",
+async()=>{
+
+    if(!deferredPrompt)
+        return;
+
 
     deferredPrompt.prompt();
 
-    const { outcome } = await deferredPrompt.userChoice;
 
-    console.log("Install:", outcome);
+    const result =
+    await deferredPrompt.userChoice;
 
-    deferredPrompt = null;
 
-    installBtn.hidden = true;
+    console.log(result);
 
-});
 
-window.addEventListener("appinstalled", () => {
-
-    console.log("SmartPrint Installed");
-
-    installBtn.hidden = true;
+    deferredPrompt=null;
 
 });
