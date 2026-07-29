@@ -2,35 +2,29 @@
 
 let deferredPrompt = null;
 
-const installBtn = document.getElementById("installBtn");
+window.addEventListener("DOMContentLoaded", () => {
 
-window.addEventListener("beforeinstallprompt", (e) => {
+    const installBtn = document.getElementById("installBtn");
 
-    e.preventDefault();
+    if (!installBtn) return;
 
-    deferredPrompt = e;
-
-    if (installBtn) {
-        installBtn.style.display = "block";
-    }
-
-});
-
-if (installBtn) {
+    installBtn.style.display = "block";
 
     installBtn.addEventListener("click", async () => {
 
-        if (!deferredPrompt) return;
+        if (!deferredPrompt) {
+
+            alert("Aplikasi belum siap untuk di-install.");
+
+            return;
+
+        }
 
         deferredPrompt.prompt();
 
         const result = await deferredPrompt.userChoice;
 
-        if (result.outcome === "accepted") {
-
-            console.log("SmartPrint berhasil diinstall");
-
-        }
+        console.log(result.outcome);
 
         deferredPrompt = null;
 
@@ -38,14 +32,14 @@ if (installBtn) {
 
     });
 
-}
+});
 
-window.addEventListener("appinstalled", () => {
+window.addEventListener("beforeinstallprompt", (e) => {
 
-    console.log("SmartPrint Installed");
+    console.log("PWA Install Ready");
 
-    if (installBtn) {
-        installBtn.style.display = "none";
-    }
+    e.preventDefault();
+
+    deferredPrompt = e;
 
 });
