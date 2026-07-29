@@ -6,20 +6,20 @@ const PDFEngine = {
 
         try {
 
-            // Pastikan library tersedia
-            if (typeof pdfjsLib === 'undefined') {
-                throw new Error('PDF.js library belum dimuat');
-            }
+          const pdfLib = window.pdfjsLib || window['pdfjs-dist/build/pdf'];
 
-            // Worker PDF.js
-            pdfjsLib.GlobalWorkerOptions.workerSrc =
-                'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+if (!pdfLib) {
+    console.error("window.pdfjsLib =", window.pdfjsLib);
+    console.error("window =", window);
+    throw new Error("PDF.js library belum dimuat");
+}
 
-            const arrayBuffer = await file.arrayBuffer();
+pdfLib.GlobalWorkerOptions.workerSrc =
+'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-            const pdf = await pdfjsLib.getDocument({
-                data: arrayBuffer
-            }).promise;
+const pdf = await pdfLib.getDocument({
+    data: arrayBuffer
+}).promise;
 
             console.log('PDF Pages:', pdf.numPages);
 
