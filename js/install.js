@@ -1,3 +1,7 @@
+window.addEventListener("beforeinstallprompt", (e) => {
+    console.log("✅ beforeinstallprompt fired");
+});
+
 "use strict";
 
 let deferredPrompt = null;
