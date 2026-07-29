@@ -164,21 +164,36 @@ class SmartPrint {
 
         }
 
-        if (file.type === "application/pdf") {
+       if (file.type === "application/pdf") {
 
-            this.fileType = "pdf";
+    this.fileType = "pdf";
 
-            if (typeof PDFEngine !== "undefined") {
+    const pdf = await PDFEngine.load(file);
 
-                await PDFEngine.load(file);
+    const page = await pdf.getPage(1);
 
-            }
+    const viewport = page.getViewport({
+        scale: 2
+    });
 
-            console.log("PDF Loaded");
+    const canvas = document.createElement("canvas");
 
-            return;
+    const ctx = canvas.getContext("2d");
 
-        }
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+
+    await page.render({
+        canvasContext: ctx,
+        viewport: viewport
+    }).promise;
+
+    Preview.setCanvas(canvas);
+
+    console.log("PDF Preview Loaded");
+
+    return;
+}
 
         alert("Format file tidak didukung");
 
