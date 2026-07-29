@@ -36,170 +36,105 @@ SERVICE_UUID:
 // =================================
 
 
-async connect(){
+async connect() {
 
+    try {
 
-try{
+        console.log("Searching Printer...");
 
+        this.device = await navigator.bluetooth.requestDevice({
 
-console.log(
-"Searching Printer..."
-);
+            acceptAllDevices: true,
 
+            optionalServices: [
+                this.SERVICE_UUID,
+                0xFFE0
+            ]
 
+        });
 
-this.device =
-await navigator.bluetooth.requestDevice({
+        if (!this.device) {
+            return false;
+        }
 
+        this.device.addEventListener(
+            "gattserverdisconnected",
+            () => {
+                this.updateStatus(false);
+                console.log("Printer Disconnected");
+            }
+        );
 
-acceptAllDevices:true,
+        this.server = await this.device.gatt.connect();
 
+        // coba service utama
+        try {
 
-optionalServices:[
+            this.service =
+                await this.server.getPrimaryService(
+                    this.SERVICE_UUID
+                );
 
-this.SERVICE_UUID
+        } catch {
 
-]
+            // fallback
+            this.service =
+                await this.server.getPrimaryService(
+                    0xFFE0
+                );
 
+        }
 
-});
+        const chars =
+            await this.service.getCharacteristics();
 
+        this.characteristic =
+            chars.find(c =>
+                c.properties.write ||
+                c.properties.writeWithoutResponse
+            );
 
+        if (!this.characteristic) {
 
+            throw new Error(
+                "Write Characteristic tidak ditemukan."
+            );
 
+        }
 
+        this.updateStatus(true);
 
-this.device.addEventListener(
+        console.log(
+            "Connected:",
+            this.device.name
+        );
 
-"gattserverdisconnected",
+        return true;
 
-()=>{
+    } catch (e) {
 
+        if (e.name === "NotFoundError") {
 
-this.updateStatus(false);
+            console.log(
+                "Pemilihan printer dibatalkan."
+            );
 
+            return false;
 
-console.log(
-"Printer Disconnected"
-);
+        }
 
+        console.error(
+            "Bluetooth Error",
+            e
+        );
+
+        this.updateStatus(false);
+
+        throw e;
+
+    }
 
 }
-
-);
-
-
-
-
-
-
-
-this.server =
-await this.device.gatt.connect();
-
-
-
-
-
-
-this.service =
-await this.server.getPrimaryService(
-
-this.SERVICE_UUID
-
-);
-
-
-
-
-
-
-let chars =
-await this.service.getCharacteristics();
-
-
-
-
-
-// cari characteristic yang bisa write
-
-
-this.characteristic =
-chars.find(
-
-c =>
-
-c.properties.write ||
-
-c.properties.writeWithoutResponse
-
-);
-
-
-
-if(!this.characteristic){
-
-
-throw new Error(
-"No Write Characteristic"
-);
-
-
-}
-
-
-
-
-
-
-this.updateStatus(true);
-
-
-
-console.log(
-
-"Connected:",
-
-this.device.name
-
-);
-
-
-
-return true;
-
-
-
-}
-
-catch(error){
-
-
-
-console.error(
-
-"Bluetooth Error",
-
-error
-
-);
-
-
-
-this.updateStatus(false);
-
-
-
-throw error;
-
-
-
-}
-
-
-
-},
-
 
 
 
