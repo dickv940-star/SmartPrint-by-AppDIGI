@@ -43,3 +43,12 @@ window.addEventListener("beforeinstallprompt", (e) => {
     deferredPrompt = e;
 
 });
+window.addEventListener("beforeinstallprompt", (e) => {
+
+    console.log("beforeinstallprompt FIRED");
+
+    e.preventDefault();
+
+    deferredPrompt = e;
+
+});
