@@ -1,5 +1,11 @@
 window.addEventListener("beforeinstallprompt", (e) => {
-    console.log("✅ beforeinstallprompt fired");
+    console.log("✅ beforeinstallprompt FIRED");
+    e.preventDefault();
+    deferredPrompt = e;
+});
+
+window.addEventListener("appinstalled", () => {
+    console.log("✅ APP INSTALLED");
 });
 
 "use strict";
