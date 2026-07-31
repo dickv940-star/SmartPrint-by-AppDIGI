@@ -1,127 +1,245 @@
 /*
 =========================================================
-SmartPrint by AppDIGI
-PWA Install Manager v2.0
+ SmartPrint by AppDIGI
+ PWA Install Manager
+ Version 5.0
 =========================================================
 */
 
 "use strict";
 
+
 let deferredPrompt = null;
 
-document.addEventListener("DOMContentLoaded", () => {
 
-    const installBtn =
-        document.getElementById("installBtn");
+// =====================================================
+// INIT
+// =====================================================
 
-    if (!installBtn) {
+console.log(
+    "INSTALL: Install Manager Ready"
+);
 
-        console.error(
-            "INSTALL: tombol #installBtn tidak ditemukan."
+
+// =====================================================
+// BEFORE INSTALL PROMPT
+// =====================================================
+
+window.addEventListener(
+    "beforeinstallprompt",
+    (event) => {
+
+        console.log(
+            "INSTALL: beforeinstallprompt tersedia."
         );
 
-        return;
-    }
 
-    console.log(
-        "INSTALL: Install Manager Ready"
-    );
+        /*
+        =================================================
+        Jangan tampilkan browser mini-infobar.
+        Kita menggunakan tombol Install sendiri.
+        =================================================
+        */
 
-
-    // =========================================
-    // DEFAULT
-    // =========================================
-
-    installBtn.hidden = true;
+        event.preventDefault();
 
 
-    // =========================================
-    // BEFORE INSTALL PROMPT
-    // =========================================
+        deferredPrompt =
+            event;
 
-    window.addEventListener(
-        "beforeinstallprompt",
-        (event) => {
 
-            console.log(
-                "INSTALL: beforeinstallprompt tersedia."
+        const installBtn =
+            document.getElementById(
+                "installBtn"
             );
 
-            event.preventDefault();
 
-            deferredPrompt = event;
+        if (!installBtn) {
 
-            installBtn.hidden = false;
-
-            console.log(
-                "INSTALL: Tombol Install ditampilkan."
+            console.error(
+                "INSTALL: installBtn tidak ditemukan."
             );
+
+            return;
 
         }
-    );
 
 
-    // =========================================
-    // INSTALL BUTTON
-    // =========================================
+        installBtn.hidden =
+            false;
 
-    installBtn.addEventListener(
-        "click",
-        async () => {
 
-            console.log(
-                "INSTALL: Tombol ditekan."
+        installBtn.style.display =
+            "block";
+
+
+        console.log(
+            "INSTALL: Tombol Install ditampilkan."
+        );
+
+    }
+);
+
+
+// =====================================================
+// DOM READY
+// =====================================================
+
+document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+
+        const installBtn =
+            document.getElementById(
+                "installBtn"
             );
 
 
-            if (!deferredPrompt) {
+        if (!installBtn) {
 
-                console.warn(
-                    "INSTALL: Install prompt belum tersedia."
+            console.error(
+                "INSTALL: installBtn tidak ditemukan."
+            );
+
+            return;
+
+        }
+
+
+        console.log(
+            "INSTALL: Tombol siap digunakan."
+        );
+
+
+        // =============================================
+        // CLICK
+        // =============================================
+
+        installBtn.addEventListener(
+            "click",
+            async () => {
+
+                console.log(
+                    "INSTALL: Tombol diklik."
                 );
 
-                return;
+
+                /*
+                =========================================
+                Pastikan prompt tersedia
+                =========================================
+                */
+
+                if (!deferredPrompt) {
+
+                    console.warn(
+                        "INSTALL: Prompt tidak tersedia."
+                    );
+
+
+                    /*
+                    -------------------------------------
+                    Browser sudah tidak memberikan prompt.
+                    -------------------------------------
+                    */
+
+                    return;
+
+                }
+
+
+                /*
+                =========================================
+                Tampilkan dialog Install
+                =========================================
+                */
+
+                deferredPrompt.prompt();
+
+
+                console.log(
+                    "INSTALL: Install prompt ditampilkan."
+                );
+
+
+                /*
+                =========================================
+                Tunggu pilihan user
+                =========================================
+                */
+
+                const result =
+                    await deferredPrompt.userChoice;
+
+
+                console.log(
+                    "INSTALL: User Choice =",
+                    result.outcome
+                );
+
+
+                /*
+                =========================================
+                Prompt hanya bisa digunakan sekali.
+                =========================================
+                */
+
+                deferredPrompt =
+                    null;
+
+
+                /*
+                =========================================
+                Sembunyikan tombol
+                =========================================
+                */
+
+                installBtn.hidden =
+                    true;
+
+
+                installBtn.style.display =
+                    "none";
+
             }
+        );
+
+    }
+);
 
 
-            deferredPrompt.prompt();
+// =====================================================
+// APP INSTALLED
+// =====================================================
+
+window.addEventListener(
+    "appinstalled",
+    () => {
+
+        console.log(
+            "INSTALL: SmartPrint berhasil di-install."
+        );
 
 
-            const result =
-                await deferredPrompt.userChoice;
+        deferredPrompt =
+            null;
 
 
-            console.log(
-                "INSTALL RESULT:",
-                result.outcome
+        const installBtn =
+            document.getElementById(
+                "installBtn"
             );
 
 
-            deferredPrompt = null;
+        if (installBtn) {
 
-            installBtn.hidden = true;
+            installBtn.hidden =
+                true;
 
-        }
-    );
-
-
-    // =========================================
-    // APP INSTALLED
-    // =========================================
-
-    window.addEventListener(
-        "appinstalled",
-        () => {
-
-            console.log(
-                "INSTALL: Aplikasi berhasil di-install."
-            );
-
-            deferredPrompt = null;
-
-            installBtn.hidden = true;
+            installBtn.style.display =
+                "none";
 
         }
-    );
 
-});
+    }
+);
