@@ -1,7 +1,7 @@
 /*
 =========================================================
 SmartPrint by AppDIGI
-Preview Engine v4.0
+Preview Engine v5.0
 =========================================================
 
 FEATURES
@@ -15,17 +15,24 @@ FEATURES
 ✓ Fit Height
 ✓ Rotate Left 90°
 ✓ Rotate Right 90°
-✓ Drag / Pan
+✓ Drag with Mouse
+✓ Drag with Touch / Finger
+✓ Drag with Pen / Stylus
+✓ Pointer Events
+✓ Pointer Capture
 ✓ Mouse Wheel Zoom
 ✓ Reset View
 ✓ Clear Preview
 ✓ Export PNG
 ✓ Export JPEG
 ✓ Scroll Compatible
+✓ Touch Compatible
 =========================================================
 */
 
 "use strict";
+
+console.log("Preview Engine v5.0 Loaded");
 
 
 const Preview = {
@@ -59,6 +66,8 @@ const Preview = {
     // =================================================
 
     dragging: false,
+
+    pointerId: null,
 
     startX: 0,
 
@@ -101,6 +110,8 @@ const Preview = {
 
         area.style.overflow = "auto";
 
+        area.style.touchAction = "none";
+
 
         // ---------------------------------------------
         // CREATE CANVAS
@@ -122,12 +133,51 @@ const Preview = {
             "grab";
 
 
+        /*
+        IMPORTANT
+
+        Agar touch tidak dianggap sebagai
+        scroll oleh browser.
+        */
+
+        this.canvas.style.touchAction =
+            "none";
+
+
+        this.canvas.style.userSelect =
+            "none";
+
+
+        this.canvas.style.webkitUserSelect =
+            "none";
+
+
         // ---------------------------------------------
         // CONTEXT
         // ---------------------------------------------
 
         this.ctx =
             this.canvas.getContext("2d");
+
+
+        if (!this.ctx) {
+
+            console.error(
+                "Canvas 2D Context tidak tersedia."
+            );
+
+            return;
+
+        }
+
+
+        // ---------------------------------------------
+        // IMAGE QUALITY
+        // ---------------------------------------------
+
+        this.ctx.imageSmoothingEnabled = true;
+
+        this.ctx.imageSmoothingQuality = "high";
 
 
         // ---------------------------------------------
@@ -161,7 +211,7 @@ const Preview = {
 
 
         console.log(
-            "Preview Engine v4.0 Ready"
+            "Preview Engine v5.0 Ready"
         );
 
     },
@@ -172,6 +222,10 @@ const Preview = {
     // =================================================
 
     updateSize() {
+
+        if (!this.canvas)
+            return;
+
 
         let width = 800;
 
@@ -202,6 +256,24 @@ const Preview = {
 
 
         // ---------------------------------------------
+        // SAFETY
+        // ---------------------------------------------
+
+        width =
+            Math.max(
+                1,
+                Math.round(width)
+            );
+
+
+        height =
+            Math.max(
+                1,
+                Math.round(height)
+            );
+
+
+        // ---------------------------------------------
         // SET CANVAS
         // ---------------------------------------------
 
@@ -211,6 +283,33 @@ const Preview = {
 
         this.canvas.height =
             height;
+
+
+        // ---------------------------------------------
+        // CSS SIZE
+        // ---------------------------------------------
+
+        this.canvas.style.width =
+            width + "px";
+
+
+        this.canvas.style.height =
+            height + "px";
+
+
+        // ---------------------------------------------
+        // CONTEXT
+        // ---------------------------------------------
+
+        if (this.ctx) {
+
+            this.ctx.imageSmoothingEnabled =
+                true;
+
+            this.ctx.imageSmoothingQuality =
+                "high";
+
+        }
 
 
         // ---------------------------------------------
@@ -228,20 +327,43 @@ const Preview = {
 
     bind() {
 
+        if (!this.canvas)
+            return;
+
 
         // =================================================
-        // MOUSE DOWN
+        // POINTER DOWN
+        // Mouse / Touch / Pen
         // =================================================
 
         this.canvas.addEventListener(
-            "mousedown",
+            "pointerdown",
             (e) => {
 
                 if (!this.image)
                     return;
 
 
+                /*
+                Hanya pointer utama.
+                */
+
+                if (
+                    e.isPrimary === false
+                ) {
+
+                    return;
+
+                }
+
+
+                e.preventDefault();
+
+
                 this.dragging = true;
+
+                this.pointerId =
+                    e.pointerId;
 
 
                 this.startX =
@@ -252,45 +374,61 @@ const Preview = {
                     e.clientY;
 
 
-                this.canvas.style.cursor =
-                    "grabbing";
+                // -----------------------------------------
+                // POINTER CAPTURE
+                // -----------------------------------------
 
-            }
-        );
+                try {
 
-
-        // =================================================
-        // MOUSE UP
-        // =================================================
-
-        window.addEventListener(
-            "mouseup",
-            () => {
-
-                this.dragging = false;
-
-
-                if (this.canvas) {
-
-                    this.canvas.style.cursor =
-                        "grab";
+                    this.canvas.setPointerCapture(
+                        e.pointerId
+                    );
 
                 }
 
+                catch (error) {
+
+                    console.warn(
+                        "Pointer capture gagal.",
+                        error
+                    );
+
+                }
+
+
+                this.canvas.style.cursor =
+                    "grabbing";
+
+            },
+            {
+                passive: false
             }
         );
 
 
         // =================================================
-        // MOUSE MOVE
+        // POINTER MOVE
         // =================================================
 
-        window.addEventListener(
-            "mousemove",
+        this.canvas.addEventListener(
+            "pointermove",
             (e) => {
 
                 if (!this.dragging)
                     return;
+
+
+                if (
+                    this.pointerId !==
+                    e.pointerId
+                ) {
+
+                    return;
+
+                }
+
+
+                e.preventDefault();
 
 
                 const dx =
@@ -318,6 +456,64 @@ const Preview = {
 
                 this.render();
 
+            },
+            {
+                passive: false
+            }
+        );
+
+
+        // =================================================
+        // POINTER UP
+        // =================================================
+
+        this.canvas.addEventListener(
+            "pointerup",
+            (e) => {
+
+                this.stopDragging(
+                    e.pointerId
+                );
+
+            }
+        );
+
+
+        // =================================================
+        // POINTER CANCEL
+        // =================================================
+
+        this.canvas.addEventListener(
+            "pointercancel",
+            (e) => {
+
+                this.stopDragging(
+                    e.pointerId
+                );
+
+            }
+        );
+
+
+        // =================================================
+        // POINTER LEAVE
+        // =================================================
+
+        this.canvas.addEventListener(
+            "pointerleave",
+            (e) => {
+
+                /*
+                Jangan langsung stop dragging.
+
+                Dengan pointer capture,
+                pointer masih bisa terus
+                mengikuti gerakan di luar canvas.
+                */
+
+                if (!this.dragging)
+                    return;
+
             }
         );
 
@@ -342,6 +538,7 @@ const Preview = {
                     this.zoomIn();
 
                 }
+
                 else {
 
                     this.zoomOut();
@@ -353,6 +550,76 @@ const Preview = {
                 passive: false
             }
         );
+
+    },
+
+
+    // =================================================
+    // STOP DRAGGING
+    // =================================================
+
+    stopDragging(pointerId = null) {
+
+        if (
+            pointerId !== null &&
+            this.pointerId !== null &&
+            pointerId !== this.pointerId
+        ) {
+
+            return;
+
+        }
+
+
+        this.dragging = false;
+
+
+        // ---------------------------------------------
+        // RELEASE POINTER
+        // ---------------------------------------------
+
+        if (
+            this.canvas &&
+            this.pointerId !== null
+        ) {
+
+            try {
+
+                if (
+                    this.canvas.hasPointerCapture(
+                        this.pointerId
+                    )
+                ) {
+
+                    this.canvas.releasePointerCapture(
+                        this.pointerId
+                    );
+
+                }
+
+            }
+
+            catch (error) {
+
+                // Ignore
+            }
+
+        }
+
+
+        this.pointerId = null;
+
+
+        // ---------------------------------------------
+        // CURSOR
+        // ---------------------------------------------
+
+        if (this.canvas) {
+
+            this.canvas.style.cursor =
+                "grab";
+
+        }
 
     },
 
@@ -391,8 +658,23 @@ const Preview = {
             return;
 
 
+        if (
+            !file.type ||
+            !file.type.startsWith("image/")
+        ) {
+
+            console.warn(
+                "File bukan image:",
+                file.type
+            );
+
+            return;
+
+        }
+
+
         // ---------------------------------------------
-        // CLEAR PREVIOUS IMAGE
+        // CLEAR PREVIOUS
         // ---------------------------------------------
 
         this.clearPreview();
@@ -425,6 +707,14 @@ const Preview = {
             );
 
 
+            console.log(
+                "Preview Image:",
+                img.naturalWidth,
+                "x",
+                img.naturalHeight
+            );
+
+
             // -----------------------------------------
             // FIT NEW FILE
             // -----------------------------------------
@@ -442,6 +732,11 @@ const Preview = {
 
             URL.revokeObjectURL(
                 objectURL
+            );
+
+
+            console.error(
+                "Gagal membuka gambar."
             );
 
 
@@ -504,7 +799,24 @@ const Preview = {
                 img;
 
 
+            console.log(
+                "Preview Canvas Loaded:",
+                img.naturalWidth,
+                "x",
+                img.naturalHeight
+            );
+
+
             this.fit();
+
+        };
+
+
+        img.onerror = () => {
+
+            console.error(
+                "Gagal membuat image dari canvas."
+            );
 
         };
 
@@ -518,7 +830,7 @@ const Preview = {
 
 
     // =================================================
-    // GET IMAGE DIMENSION
+    // GET IMAGE WIDTH
     // =================================================
 
     getImageWidth() {
@@ -535,6 +847,10 @@ const Preview = {
 
     },
 
+
+    // =================================================
+    // GET IMAGE HEIGHT
+    // =================================================
 
     getImageHeight() {
 
@@ -561,6 +877,10 @@ const Preview = {
             return;
 
 
+        if (!this.canvas)
+            return;
+
+
         const cw =
             this.canvas.width;
 
@@ -577,29 +897,29 @@ const Preview = {
             this.getImageHeight();
 
 
-        if (!iw || !ih)
+        if (
+            !iw ||
+            !ih ||
+            !cw ||
+            !ch
+        ) {
+
             return;
+
+        }
 
 
         // ---------------------------------------------
-        // SCALE X
+        // SCALE
         // ---------------------------------------------
 
         const scaleX =
             cw / iw;
 
 
-        // ---------------------------------------------
-        // SCALE Y
-        // ---------------------------------------------
-
         const scaleY =
             ch / ih;
 
-
-        // ---------------------------------------------
-        // FIT
-        // ---------------------------------------------
 
         this.scale =
             Math.min(
@@ -625,6 +945,20 @@ const Preview = {
 
 
         // ---------------------------------------------
+        // LIMIT
+        // ---------------------------------------------
+
+        this.scale =
+            Math.max(
+                0.10,
+                Math.min(
+                    10,
+                    this.scale
+                )
+            );
+
+
+        // ---------------------------------------------
         // RESET POSITION
         // ---------------------------------------------
 
@@ -638,6 +972,13 @@ const Preview = {
         // ---------------------------------------------
 
         this.rotation = 0;
+
+
+        // ---------------------------------------------
+        // STOP DRAG
+        // ---------------------------------------------
+
+        this.stopDragging();
 
 
         // ---------------------------------------------
@@ -671,12 +1012,11 @@ const Preview = {
         this.posY = 0;
 
 
-        // ---------------------------------------------
-        // IMPORTANT
-        // ---------------------------------------------
-        // Rotation tidak diubah.
-        // 100% hanya mengubah zoom.
-        // ---------------------------------------------
+        /*
+        Rotation tidak diubah.
+
+        100% hanya mengubah zoom.
+        */
 
 
         this.render();
@@ -740,19 +1080,25 @@ const Preview = {
             this.getImageHeight();
 
 
-        if (!iw || !ih)
+        if (
+            !iw ||
+            !ih
+        ) {
+
             return;
+
+        }
 
 
         // ---------------------------------------------
-        // SAVE CONTEXT
+        // SAVE
         // ---------------------------------------------
 
         this.ctx.save();
 
 
         // ---------------------------------------------
-        // CENTER
+        // CENTER + POSITION
         // ---------------------------------------------
 
         this.ctx.translate(
@@ -793,7 +1139,7 @@ const Preview = {
 
 
         // ---------------------------------------------
-        // DRAW IMAGE
+        // IMAGE
         // ---------------------------------------------
 
         this.ctx.drawImage(
@@ -909,18 +1255,14 @@ const Preview = {
         // LIMIT
         // ---------------------------------------------
 
-        if (this.scale < 0.10) {
-
-            this.scale = 0.10;
-
-        }
-
-
-        if (this.scale > 10) {
-
-            this.scale = 10;
-
-        }
+        this.scale =
+            Math.max(
+                0.10,
+                Math.min(
+                    10,
+                    this.scale
+                )
+            );
 
 
         this.render();
@@ -951,14 +1293,6 @@ const Preview = {
         }
 
 
-        // ---------------------------------------------
-        // IMPORTANT
-        // ---------------------------------------------
-        // Scale TIDAK diubah.
-        // Jadi jika zoom = 100%,
-        // setelah rotate tetap 100%.
-        // ---------------------------------------------
-
         this.render();
 
     },
@@ -983,10 +1317,6 @@ const Preview = {
 
         }
 
-
-        // ---------------------------------------------
-        // Scale tetap.
-        // ---------------------------------------------
 
         this.render();
 
@@ -1057,6 +1387,16 @@ const Preview = {
             iw;
 
 
+        this.scale =
+            Math.max(
+                0.10,
+                Math.min(
+                    10,
+                    this.scale
+                )
+            );
+
+
         this.posX = 0;
 
         this.posY = 0;
@@ -1091,6 +1431,16 @@ const Preview = {
         this.scale =
             this.canvas.height /
             ih;
+
+
+        this.scale =
+            Math.max(
+                0.10,
+                Math.min(
+                    10,
+                    this.scale
+                )
+            );
 
 
         this.posX = 0;
@@ -1129,16 +1479,11 @@ const Preview = {
     // =================================================
     // CLEAR PREVIEW
     // =================================================
-    //
-    // Digunakan ketika:
-    //
-    // Upload file baru
-    // Reset workspace
-    // Hapus file
-    //
-    // =================================================
 
     clearPreview() {
+
+        this.stopDragging();
+
 
         this.image = null;
 
@@ -1152,9 +1497,6 @@ const Preview = {
 
 
         this.rotation = 0;
-
-
-        this.dragging = false;
 
 
         this.clear();
@@ -1248,6 +1590,68 @@ const Preview = {
 
 
     // =================================================
+    // SET POSITION
+    // =================================================
+
+    setPosition(x, y) {
+
+        x = Number(x);
+
+        y = Number(y);
+
+
+        if (
+            !Number.isFinite(x) ||
+            !Number.isFinite(y)
+        ) {
+
+            return;
+
+        }
+
+
+        this.posX = x;
+
+        this.posY = y;
+
+
+        this.render();
+
+    },
+
+
+    // =================================================
+    // MOVE
+    // =================================================
+
+    move(dx, dy) {
+
+        dx = Number(dx);
+
+        dy = Number(dy);
+
+
+        if (
+            !Number.isFinite(dx) ||
+            !Number.isFinite(dy)
+        ) {
+
+            return;
+
+        }
+
+
+        this.posX += dx;
+
+        this.posY += dy;
+
+
+        this.render();
+
+    },
+
+
+    // =================================================
     // EXPORT PNG
     // =================================================
 
@@ -1276,6 +1680,31 @@ const Preview = {
             return null;
 
 
+        quality =
+            Number(quality);
+
+
+        if (
+            !Number.isFinite(
+                quality
+            )
+        ) {
+
+            quality = 0.95;
+
+        }
+
+
+        quality =
+            Math.max(
+                0,
+                Math.min(
+                    1,
+                    quality
+                )
+            );
+
+
         return this.canvas.toDataURL(
 
             "image/jpeg",
@@ -1293,7 +1722,8 @@ const Preview = {
 // GLOBAL EXPORT
 // =====================================================
 
-window.Preview = Preview;
+window.Preview =
+    Preview;
 
 
 // =====================================================
@@ -1301,5 +1731,5 @@ window.Preview = Preview;
 // =====================================================
 
 console.log(
-    "Preview Engine v4.0 Loaded"
+    "Preview Engine v5.0 Loaded"
 );
