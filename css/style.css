@@ -1,186 +1,46 @@
 /* =========================================================
-   PREVIEW CONTROLS
-   Responsive Desktop + Mobile
+   SMARTPRINT HEADER
 ========================================================= */
 
-.preview-controls {
+header,
+.topbar,
+.app-header {
+    height: 40px !important;
+    min-height: 40px !important;
+
+    padding: 0 12px !important;
+
     display: flex;
     align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    margin-bottom: 8px;
 }
 
-/* Semua tombol Preview */
-.preview-controls button {
-    min-width: 42px;
-    height: 38px;
+/* Logo */
+header img,
+.topbar img,
+.app-header img,
+.logo img {
+    width: 30px !important;
+    height: 30px !important;
 
-    padding: 0 10px;
+    max-width: 30px !important;
+    max-height: 30px !important;
 
-    border: 1px solid #cfd4dc;
-    border-radius: 7px;
-
-    background: #ffffff;
-    color: #222;
-
-    font-size: 14px;
-    font-weight: 600;
-
-    cursor: pointer;
-
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-
-    transition:
-        background 0.15s ease,
-        transform 0.1s ease,
-        border-color 0.15s ease;
+    object-fit: contain;
 }
 
-/* Hover desktop */
-.preview-controls button:hover {
-    background: #f3f5f8;
-    border-color: #aeb6c2;
+/* Nama aplikasi */
+header .app-title,
+.topbar .app-title,
+.app-header .app-title {
+    font-size: 15px !important;
+    line-height: 16px !important;
+    margin: 0 !important;
 }
 
-/* Saat ditekan */
-.preview-controls button:active {
-    transform: scale(0.96);
-}
-
-/* Tombol angka zoom */
-.preview-controls #zoomOut,
-.preview-controls #zoomIn {
-    min-width: 42px;
-    font-size: 18px;
-}
-
-/* Nilai zoom */
-.preview-controls #zoomValue {
-    min-width: 58px;
-    height: 38px;
-
-    padding: 0 8px;
-
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-
-    border: 1px solid #d5d9df;
-    border-radius: 7px;
-
-    background: #f8f9fb;
-
-    font-size: 14px;
-    font-weight: 700;
-}
-
-/* Fit */
-.preview-controls #fit {
-    min-width: 52px;
-}
-
-/* Fit Width / Height */
-.preview-controls #fitWidth,
-.preview-controls #fitHeight {
-    min-width: 42px;
-}
-
-/* Rotate */
-.preview-controls #rotateLeft,
-.preview-controls #rotateRight {
-    min-width: 48px;
-    font-size: 14px;
-}
-
-/* Reset */
-.preview-controls #resetPreview {
-    min-width: 58px;
-}
-
-
-/* =========================================================
-   MOBILE
-========================================================= */
-
-@media (max-width: 768px) {
-
-    .preview-controls {
-        width: 100%;
-
-        display: grid;
-
-        grid-template-columns:
-            repeat(4, minmax(0, 1fr));
-
-        gap: 8px;
-
-        margin-bottom: 10px;
-    }
-
-
-    .preview-controls button {
-        width: 100%;
-        min-width: 0;
-
-        height: 46px;
-
-        padding: 0 6px;
-
-        font-size: 15px;
-
-        border-radius: 8px;
-    }
-
-
-    .preview-controls #zoomOut,
-    .preview-controls #zoomIn {
-        font-size: 20px;
-    }
-
-
-    .preview-controls #zoomValue {
-        width: 100%;
-        min-width: 0;
-
-        height: 46px;
-
-        font-size: 15px;
-    }
-
-
-    .preview-controls #resetPreview {
-        min-width: 0;
-    }
-
-}
-
-
-/* =========================================================
-   SMALL PHONE
-========================================================= */
-
-@media (max-width: 480px) {
-
-    .preview-controls {
-        grid-template-columns:
-            repeat(3, minmax(0, 1fr));
-
-        gap: 7px;
-    }
-
-
-    .preview-controls button {
-        height: 48px;
-
-        font-size: 15px;
-    }
-
-
-    .preview-controls #zoomValue {
-        height: 48px;
-    }
-
+/* Subtitle */
+header .subtitle,
+.topbar .subtitle,
+.app-header .subtitle {
+    font-size: 9px !important;
+    line-height: 10px !important;
 }
