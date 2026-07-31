@@ -1,83 +1,112 @@
+/*
+=========================================================
+SmartPrint by AppDIGI
+PWA Install Manager v2.0
+=========================================================
+*/
+
 "use strict";
 
 let deferredPrompt = null;
 
 document.addEventListener("DOMContentLoaded", () => {
 
-    const installBtn = document.getElementById("installBtn");
+    const installBtn =
+        document.getElementById("installBtn");
 
     if (!installBtn) {
-        console.warn("Install button tidak ditemukan.");
+
+        console.error(
+            "INSTALL: tombol #installBtn tidak ditemukan."
+        );
+
         return;
     }
 
-    // Awalnya sembunyikan tombol
+    console.log(
+        "INSTALL: Install Manager Ready"
+    );
+
+
+    // =========================================
+    // DEFAULT
+    // =========================================
+
     installBtn.hidden = true;
+
 
     // =========================================
     // BEFORE INSTALL PROMPT
     // =========================================
 
-    window.addEventListener("beforeinstallprompt", (e) => {
+    window.addEventListener(
+        "beforeinstallprompt",
+        (event) => {
 
-        console.log("PWA Install Prompt tersedia.");
+            console.log(
+                "INSTALL: beforeinstallprompt tersedia."
+            );
 
-        e.preventDefault();
+            event.preventDefault();
 
-        deferredPrompt = e;
+            deferredPrompt = event;
 
-        installBtn.hidden = false;
+            installBtn.hidden = false;
 
-    });
+            console.log(
+                "INSTALL: Tombol Install ditampilkan."
+            );
+
+        }
+    );
 
 
     // =========================================
     // INSTALL BUTTON
     // =========================================
 
-    installBtn.addEventListener("click", async () => {
+    installBtn.addEventListener(
+        "click",
+        async () => {
 
-        if (!deferredPrompt) {
-
-            console.warn(
-                "Install prompt belum tersedia."
+            console.log(
+                "INSTALL: Tombol ditekan."
             );
 
-            return;
 
-        }
+            if (!deferredPrompt) {
 
-        try {
+                console.warn(
+                    "INSTALL: Install prompt belum tersedia."
+                );
+
+                return;
+            }
+
 
             deferredPrompt.prompt();
+
 
             const result =
                 await deferredPrompt.userChoice;
 
+
             console.log(
-                "Install result:",
+                "INSTALL RESULT:",
                 result.outcome
             );
 
-        }
-        catch (error) {
 
-            console.error(
-                "Install error:",
-                error
-            );
+            deferredPrompt = null;
+
+            installBtn.hidden = true;
 
         }
-
-        deferredPrompt = null;
-
-        installBtn.hidden = true;
-
-    });
+    );
 
 
     // =========================================
-    // APP SUDAH TERINSTALL
+    // APP INSTALLED
     // =========================================
 
     window.addEventListener(
@@ -85,7 +114,7 @@ document.addEventListener("DOMContentLoaded", () => {
         () => {
 
             console.log(
-                "RAWbt berhasil di-install."
+                "INSTALL: Aplikasi berhasil di-install."
             );
 
             deferredPrompt = null;
