@@ -1,4 +1,4 @@
-/*
+/
 =========================================================
 SmartPrint by AppDIGI
 Printer Manager v3.0
