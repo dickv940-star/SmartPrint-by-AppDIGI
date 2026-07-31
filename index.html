@@ -172,7 +172,35 @@ Preview
 
 
 <div class="toolbar">
+<div class="preview-toolbar">
 
+    <button type="button" onclick="Preview.zoomOut()">
+        −
+    </button>
+
+    <span id="zoomValue">100%</span>
+
+    <button type="button" onclick="Preview.zoomIn()">
+        +
+    </button>
+
+    <button type="button" onclick="Preview.actualSize()">
+        100%
+    </button>
+
+    <button type="button" onclick="Preview.rotateLeft()">
+        ↶ 90°
+    </button>
+
+    <button type="button" onclick="Preview.rotateRight()">
+        ↷ 90°
+    </button>
+
+    <button type="button" onclick="Preview.reset()">
+        Reset
+    </button>
+
+</div>
 
 
 <button id="zoomOut">
