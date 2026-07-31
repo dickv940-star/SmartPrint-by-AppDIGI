@@ -1,281 +1,461 @@
-/* =====================================================
-   SMARTPRINT MOBILE
-===================================================== */
+/* =========================================================
+   SmartPrint by AppDIGI
+   Responsive UI
+   Desktop + Tablet + Mobile
+========================================================= */
 
-@media (max-width: 768px) {
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100%;
+}
+
+body {
+    overflow-x: hidden;
+}
+
+
+/* =========================================================
+   MAIN WORKSPACE
+========================================================= */
+
+.workspace,
+.app-workspace,
+.main-workspace {
+    width: 100%;
+    min-width: 0;
+}
+
+
+/* =========================================================
+   PREVIEW
+========================================================= */
+
+#preview {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+
+    overflow: auto;
+
+    -webkit-overflow-scrolling: touch;
+
+    touch-action: pan-x pan-y;
+
+    border-radius: 10px;
+}
+
+
+/*
+Canvas tidak boleh menentukan lebar halaman.
+*/
+
+#previewCanvas {
+    display: block;
+
+    max-width: none;
+
+    margin: 0 auto;
+
+    touch-action: none;
+
+    user-select: none;
+
+    -webkit-user-select: none;
+
+    -webkit-touch-callout: none;
+}
+
+
+/* =========================================================
+   PREVIEW CONTROLS
+========================================================= */
+
+.preview-controls,
+.preview-toolbar,
+#previewControls {
+
+    display: flex;
+
+    align-items: center;
+
+    flex-wrap: wrap;
+
+    gap: 6px;
+
+    margin-bottom: 8px;
+}
+
+
+.preview-controls button,
+.preview-toolbar button,
+#previewControls button {
+
+    min-height: 34px;
+
+    padding: 6px 10px;
+
+    font-size: 13px;
+
+    border-radius: 6px;
+
+    cursor: pointer;
+
+    touch-action: manipulation;
+}
+
+
+/* =========================================================
+   FILE AREA
+========================================================= */
+
+.file-area,
+.file-controls {
+
+    width: 100%;
+
+    display: flex;
+
+    align-items: center;
+
+    gap: 8px;
+
+    flex-wrap: wrap;
+}
+
+
+/*
+Hanya file input utama yang ditampilkan.
+*/
+
+#fileInput {
+
+    display: block;
+
+    width: 100%;
+
+    max-width: 100%;
+
+    min-height: 38px;
+
+    font-size: 14px;
+}
+
+
+/*
+Jika ada file input tambahan yang tidak diperlukan.
+Jangan membuat semua input type=file hidden,
+karena #fileInput harus tetap aktif.
+*/
+
+input[type="file"]:not(#fileInput) {
+    display: none;
+}
+
+
+/* =========================================================
+   PRINTER PANEL
+========================================================= */
+
+.printer-panel,
+#printerPanel,
+.settings-panel {
+
+    min-width: 0;
+
+    width: 100%;
+}
+
+
+/* =========================================================
+   BUTTON
+========================================================= */
+
+button {
+
+    touch-action: manipulation;
+}
+
+
+/* =========================================================
+   TABLET
+========================================================= */
+
+@media (max-width: 1000px) {
+
+    .workspace,
+    .app-workspace,
+    .main-workspace {
+
+        grid-template-columns:
+            180px
+            minmax(0, 1fr);
+
+    }
+
+
+    .printer-panel,
+    #printerPanel,
+    .settings-panel {
+
+        grid-column: 1 / -1;
+
+    }
+
+}
+
+
+/* =========================================================
+   MOBILE
+========================================================= */
+
+@media (max-width: 700px) {
 
     html,
     body {
+
         width: 100%;
-        min-height: 100%;
-        margin: 0;
-        padding: 0;
+
         overflow-x: hidden;
+
     }
+
 
     body {
+
         font-size: 14px;
+
     }
 
 
-    /* ================================================
-       TOPBAR
-    ================================================ */
+    /* -----------------------------------------
+       HEADER
+    ----------------------------------------- */
 
+    header,
+    .header,
     .topbar {
-        height: 58px;
-        padding: 0 12px;
-        box-sizing: border-box;
-    }
 
-    .logo-area img {
-        width: 36px;
-        height: 36px;
-    }
+        min-height: 48px;
 
-    .logo-area h1 {
-        font-size: 17px;
-        margin: 0;
-    }
+        padding: 6px 10px;
 
-    .logo-area span {
-        font-size: 10px;
-    }
-
-    .status {
-        font-size: 11px;
     }
 
 
-    /* ================================================
-       MAIN CONTAINER
-    ================================================ */
+    /* -----------------------------------------
+       MAIN LAYOUT
+    ----------------------------------------- */
 
-    .container {
-        display: block;
+    .workspace,
+    .app-workspace,
+    .main-workspace {
+
+        display: flex !important;
+
+        flex-direction: column !important;
+
         width: 100%;
-        min-height: calc(100vh - 58px);
-        padding-bottom: 68px;
-        box-sizing: border-box;
-    }
 
+        gap: 10px;
 
-    /* ================================================
-       SIDEBAR
-    ================================================ */
-
-    .sidebar {
-        display: none;
-    }
-
-
-    /* ================================================
-       WORKSPACE
-    ================================================ */
-
-    .workspace {
-        width: 100%;
-        min-width: 0;
         padding: 8px;
-        box-sizing: border-box;
+
     }
 
 
-    /* ================================================
-       PREVIEW CARD
-    ================================================ */
+    /* -----------------------------------------
+       SIDEBAR
+    ----------------------------------------- */
 
-    .preview-card {
-        width: 100%;
-        margin: 0;
-        padding: 10px;
-        box-sizing: border-box;
-        border-radius: 12px;
+    .sidebar,
+    aside {
+
+        width: 100% !important;
+
+        min-width: 0 !important;
+
+        height: auto !important;
+
+        max-height: none;
+
+        overflow-x: auto;
+
+        overflow-y: hidden;
+
     }
 
-    .preview-card h2 {
-        font-size: 16px;
-        margin: 2px 0 8px;
+
+    .sidebar ul,
+    .sidebar nav,
+    aside ul,
+    aside nav {
+
+        display: flex;
+
+        flex-direction: row;
+
+        gap: 6px;
+
+        width: max-content;
+
     }
 
 
-    /* ================================================
-       PREVIEW AREA
-    ================================================ */
+    .sidebar li,
+    aside li {
+
+        flex: 0 0 auto;
+
+    }
+
+
+    .sidebar a,
+    .sidebar button,
+    aside a,
+    aside button {
+
+        min-height: 42px;
+
+        padding: 10px 13px;
+
+        font-size: 13px;
+
+    }
+
+
+    /* -----------------------------------------
+       PREVIEW PANEL
+    ----------------------------------------- */
+
+    .preview-panel,
+    .preview-container,
+    .preview-section {
+
+        width: 100% !important;
+
+        min-width: 0 !important;
+
+    }
+
+
+    /* -----------------------------------------
+       PREVIEW
+    ----------------------------------------- */
 
     #preview {
 
         width: 100%;
 
-        height: 52vh;
+        height: 58vh;
 
-        min-height: 300px;
+        min-height: 350px;
 
-        max-height: 520px;
+        max-height: 650px;
 
         overflow: auto;
 
-        display: flex;
-
-        align-items: center;
-
-        justify-content: center;
-
-        box-sizing: border-box;
-
-        padding: 10px;
-
-        border-radius: 10px;
+        border-radius: 8px;
 
         -webkit-overflow-scrolling: touch;
 
     }
 
 
-    /* ================================================
-       CANVAS MOBILE
-    ================================================ */
+    /*
+    Canvas mengikuti ruang HP.
+    */
 
-    #preview canvas {
+    #previewCanvas {
 
-        display: block;
+        max-width: none;
 
-        width: auto;
-
-        height: auto;
-
-        max-width: 100%;
-
-        max-height: 100%;
-
-        object-fit: contain;
-
-        touch-action: none;
-
-        flex-shrink: 0;
+        max-height: none;
 
     }
 
 
-    /* ================================================
-       TOOLBAR
-    ================================================ */
+    /* -----------------------------------------
+       PREVIEW BUTTONS
+    ----------------------------------------- */
 
-    .toolbar,
-    .preview-toolbar {
+    .preview-controls,
+    .preview-toolbar,
+    #previewControls {
 
         width: 100%;
 
-        display: flex;
+        display: grid;
 
-        align-items: center;
-
-        justify-content: center;
+        grid-template-columns:
+            repeat(4, minmax(0, 1fr));
 
         gap: 6px;
 
-        margin: 8px 0;
-
-        flex-wrap: wrap;
-
     }
 
 
-    .toolbar button,
-    .preview-toolbar button {
+    .preview-controls button,
+    .preview-toolbar button,
+    #previewControls button {
 
-        min-width: 42px;
+        width: 100%;
 
-        height: 40px;
+        min-height: 42px;
 
-        padding: 0 10px;
-
-        border-radius: 8px;
-
-        font-size: 15px;
-
-        font-weight: 600;
-
-        touch-action: manipulation;
-
-    }
-
-
-    #zoomValue {
-
-        min-width: 52px;
-
-        text-align: center;
+        padding: 8px 5px;
 
         font-size: 13px;
 
-        font-weight: 600;
+    }
+
+
+    /* -----------------------------------------
+       PRINTER
+    ----------------------------------------- */
+
+    .printer-panel,
+    #printerPanel,
+    .settings-panel {
+
+        width: 100% !important;
+
+        min-width: 0 !important;
+
+        padding: 12px !important;
 
     }
 
 
-    /* ================================================
-       FILE BUTTON
-    ================================================ */
-
-    .file-area {
+    .printer-panel button,
+    #printerPanel button,
+    .settings-panel button {
 
         width: 100%;
 
-        display: flex;
+        min-height: 44px;
 
-        justify-content: center;
-
-        margin-top: 8px;
+        font-size: 14px;
 
     }
 
 
-    #uploadBtn {
+    /* -----------------------------------------
+       SELECT / INPUT
+    ----------------------------------------- */
+
+    select,
+    input[type="text"],
+    input[type="number"],
+    input[type="file"] {
 
         width: 100%;
-
-        min-height: 46px;
-
-        border-radius: 10px;
-
-        font-size: 15px;
-
-        font-weight: 600;
-
-        touch-action: manipulation;
-
-    }
-
-
-    /* ================================================
-       PRINTER PANEL
-    ================================================ */
-
-    .panel {
-
-        width: calc(100% - 16px);
-
-        margin: 8px;
-
-        box-sizing: border-box;
-
-        padding: 12px;
-
-        border-radius: 12px;
-
-    }
-
-
-    .panel h2 {
-
-        font-size: 16px;
-
-    }
-
-
-    .panel select,
-    .panel input {
 
         min-height: 42px;
 
@@ -284,86 +464,115 @@
     }
 
 
-    .buttons {
+    input[type="range"] {
 
-        display: grid;
+        width: 100%;
 
-        grid-template-columns: 1fr 1fr;
+        min-height: 36px;
+
+    }
+
+
+    /* -----------------------------------------
+       FILE
+    ----------------------------------------- */
+
+    #fileInput {
+
+        width: 100%;
+
+        min-height: 44px;
+
+        font-size: 14px;
+
+    }
+
+
+    /* -----------------------------------------
+       PRINT BUTTON
+    ----------------------------------------- */
+
+    #printBtn,
+    #connectBtn {
+
+        min-height: 46px;
+
+        font-size: 15px;
+
+        font-weight: 600;
+
+    }
+
+}
+
+
+/* =========================================================
+   VERY SMALL PHONE
+========================================================= */
+
+@media (max-width: 400px) {
+
+    .workspace,
+    .app-workspace,
+    .main-workspace {
+
+        padding: 6px;
 
         gap: 8px;
 
     }
 
 
-    .buttons button {
+    #preview {
 
-        min-height: 46px;
+        height: 55vh;
 
-        font-size: 14px;
-
-        border-radius: 9px;
-
-        touch-action: manipulation;
+        min-height: 300px;
 
     }
 
 
-    /* ================================================
-       BOTTOM NAV
-    ================================================ */
+    .preview-controls,
+    .preview-toolbar,
+    #previewControls {
 
-    .bottom-nav {
-
-        position: fixed;
-
-        left: 0;
-
-        right: 0;
-
-        bottom: 0;
-
-        z-index: 9999;
-
-        height: 62px;
-
-        display: flex;
-
-        align-items: center;
-
-        justify-content: space-around;
-
-        padding:
-
-            6px
-
-            8px
-
-            env(safe-area-inset-bottom);
-
-        box-sizing: border-box;
-
-        background: #ffffff;
-
-        border-top: 1px solid #ddd;
+        grid-template-columns:
+            repeat(3, minmax(0, 1fr));
 
     }
 
 
-    .bottom-nav button {
+    .preview-controls button,
+    .preview-toolbar button,
+    #previewControls button {
 
-        width: 52px;
+        min-height: 44px;
 
-        height: 46px;
+        font-size: 12px;
 
-        border: 0;
+    }
 
-        background: transparent;
+}
 
-        border-radius: 10px;
 
-        font-size: 22px;
+/* =========================================================
+   TOUCH DEVICE
+========================================================= */
 
-        touch-action: manipulation;
+@media (pointer: coarse) {
+
+    button,
+    select,
+    input {
+
+        min-height: 42px;
+
+    }
+
+
+    #previewCanvas {
+
+        touch-action: none;
 
     }
 
