@@ -1,306 +1,370 @@
-/*======================================================
- RAWbt by AppDIGI v4
- Responsive.css
-======================================================*/
+/* =====================================================
+   SMARTPRINT MOBILE
+===================================================== */
+
+@media (max-width: 768px) {
+
+    html,
+    body {
+        width: 100%;
+        min-height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow-x: hidden;
+    }
 
-/* ==========================================
-   DESKTOP (Default >1024px)
-========================================== */
+    body {
+        font-size: 14px;
+    }
 
-.container{
 
-    display:grid;
+    /* ================================================
+       TOPBAR
+    ================================================ */
 
-    grid-template-columns:220px 1fr 320px;
+    .topbar {
+        height: 58px;
+        padding: 0 12px;
+        box-sizing: border-box;
+    }
 
-    gap:20px;
+    .logo-area img {
+        width: 36px;
+        height: 36px;
+    }
 
-}
+    .logo-area h1 {
+        font-size: 17px;
+        margin: 0;
+    }
 
-/* ==========================================
-   LAPTOP
-========================================== */
+    .logo-area span {
+        font-size: 10px;
+    }
 
-@media (max-width:1200px){
+    .status {
+        font-size: 11px;
+    }
 
-.container{
 
-    grid-template-columns:
+    /* ================================================
+       MAIN CONTAINER
+    ================================================ */
 
-    200px
+    .container {
+        display: block;
+        width: 100%;
+        min-height: calc(100vh - 58px);
+        padding-bottom: 68px;
+        box-sizing: border-box;
+    }
 
-    1fr
 
-    280px;
+    /* ================================================
+       SIDEBAR
+    ================================================ */
 
-}
+    .sidebar {
+        display: none;
+    }
 
-#preview{
 
-    min-height:550px;
+    /* ================================================
+       WORKSPACE
+    ================================================ */
 
-}
+    .workspace {
+        width: 100%;
+        min-width: 0;
+        padding: 8px;
+        box-sizing: border-box;
+    }
 
-}
 
-/* ==========================================
-   TABLET
-========================================== */
+    /* ================================================
+       PREVIEW CARD
+    ================================================ */
 
-@media (max-width:992px){
+    .preview-card {
+        width: 100%;
+        margin: 0;
+        padding: 10px;
+        box-sizing: border-box;
+        border-radius: 12px;
+    }
 
-.container{
+    .preview-card h2 {
+        font-size: 16px;
+        margin: 2px 0 8px;
+    }
 
-    grid-template-columns:
 
-    1fr;
+    /* ================================================
+       PREVIEW AREA
+    ================================================ */
 
-}
+    #preview {
 
-.sidebar{
+        width: 100%;
 
-    display:none;
+        height: 52vh;
 
-}
+        min-height: 300px;
 
-.panel{
+        max-height: 520px;
 
-    margin-top:20px;
+        overflow: auto;
 
-}
+        display: flex;
 
-#preview{
+        align-items: center;
 
-    min-height:500px;
+        justify-content: center;
 
-}
+        box-sizing: border-box;
 
-}
+        padding: 10px;
 
-/* ==========================================
-   MOBILE
-========================================== */
+        border-radius: 10px;
 
-@media (max-width:768px){
+        -webkit-overflow-scrolling: touch;
 
-.topbar{
+    }
 
-    height:65px;
 
-    padding:0 15px;
+    /* ================================================
+       CANVAS MOBILE
+    ================================================ */
 
-}
+    #preview canvas {
 
-.logo-area h1{
+        display: block;
 
-    font-size:20px;
+        width: auto;
 
-}
+        height: auto;
 
-.logo-area span{
+        max-width: 100%;
 
-    font-size:12px;
+        max-height: 100%;
 
-}
+        object-fit: contain;
 
-.container{
+        touch-action: none;
 
-    padding:15px;
+        flex-shrink: 0;
 
-}
+    }
 
-.preview-card{
 
-    padding:15px;
+    /* ================================================
+       TOOLBAR
+    ================================================ */
 
-}
+    .toolbar,
+    .preview-toolbar {
 
-.panel{
+        width: 100%;
 
-    padding:15px;
+        display: flex;
 
-}
+        align-items: center;
 
-#preview{
+        justify-content: center;
 
-    min-height:350px;
+        gap: 6px;
 
-}
+        margin: 8px 0;
 
-.buttons{
+        flex-wrap: wrap;
 
-    flex-direction:column;
+    }
 
-}
 
-#connectBtn,
-#printBtn{
+    .toolbar button,
+    .preview-toolbar button {
 
-    width:100%;
+        min-width: 42px;
 
-}
+        height: 40px;
 
-}
+        padding: 0 10px;
 
-/* ==========================================
-   SMALL MOBILE
-========================================== */
+        border-radius: 8px;
 
-@media (max-width:480px){
+        font-size: 15px;
 
-#logo{
+        font-weight: 600;
 
-    width:40px;
+        touch-action: manipulation;
 
-    height:40px;
+    }
 
-}
 
-.logo-area{
+    #zoomValue {
 
-    gap:10px;
+        min-width: 52px;
 
-}
+        text-align: center;
 
-.logo-area h1{
+        font-size: 13px;
 
-    font-size:18px;
+        font-weight: 600;
 
-}
+    }
 
-.logo-area span{
 
-    display:none;
+    /* ================================================
+       FILE BUTTON
+    ================================================ */
 
-}
+    .file-area {
 
-.status{
+        width: 100%;
 
-    font-size:12px;
+        display: flex;
 
-}
+        justify-content: center;
 
-.topbar{
+        margin-top: 8px;
 
-    height:60px;
+    }
 
-}
 
-.container{
+    #uploadBtn {
 
-    padding:10px;
+        width: 100%;
 
-}
+        min-height: 46px;
 
-.preview-card{
+        border-radius: 10px;
 
-    padding:12px;
+        font-size: 15px;
 
-}
+        font-weight: 600;
 
-.panel{
+        touch-action: manipulation;
 
-    padding:12px;
+    }
 
-}
 
-#preview{
+    /* ================================================
+       PRINTER PANEL
+    ================================================ */
 
-    min-height:280px;
+    .panel {
 
-    font-size:13px;
+        width: calc(100% - 16px);
 
-}
+        margin: 8px;
 
-input,
-select{
+        box-sizing: border-box;
 
-    font-size:14px;
+        padding: 12px;
 
-}
+        border-radius: 12px;
 
-}
+    }
 
-/* ==========================================
-   BOTTOM NAVIGATION
-========================================== */
 
-@media (max-width:992px){
+    .panel h2 {
 
-.bottom-nav{
+        font-size: 16px;
 
-    position:fixed;
+    }
 
-    bottom:0;
 
-    left:0;
+    .panel select,
+    .panel input {
 
-    width:100%;
+        min-height: 42px;
 
-    height:65px;
+        font-size: 14px;
 
-    background:#fff;
+    }
 
-    display:flex;
 
-    justify-content:space-around;
+    .buttons {
 
-    align-items:center;
+        display: grid;
 
-    box-shadow:0 -3px 12px rgba(0,0,0,.12);
+        grid-template-columns: 1fr 1fr;
 
-    z-index:999;
+        gap: 8px;
 
-}
+    }
 
-.bottom-nav button{
 
-    border:none;
+    .buttons button {
 
-    background:none;
+        min-height: 46px;
 
-    font-size:22px;
+        font-size: 14px;
 
-    cursor:pointer;
+        border-radius: 9px;
 
-    color:#444;
+        touch-action: manipulation;
 
-    transition:.25s;
+    }
 
-}
 
-.bottom-nav button:hover{
+    /* ================================================
+       BOTTOM NAV
+    ================================================ */
 
-    color:#FFC107;
+    .bottom-nav {
 
-}
+        position: fixed;
 
-body{
+        left: 0;
 
-    padding-bottom:75px;
+        right: 0;
 
-}
+        bottom: 0;
 
-}
+        z-index: 9999;
 
-/* ==========================================
-   LARGE MONITOR
-========================================== */
+        height: 62px;
 
-@media (min-width:1600px){
+        display: flex;
 
-.container{
+        align-items: center;
 
-    max-width:1600px;
+        justify-content: space-around;
 
-    margin:auto;
+        padding:
 
-}
+            6px
 
-#preview{
+            8px
 
-    min-height:850px;
+            env(safe-area-inset-bottom);
 
-}
+        box-sizing: border-box;
+
+        background: #ffffff;
+
+        border-top: 1px solid #ddd;
+
+    }
+
+
+    .bottom-nav button {
+
+        width: 52px;
+
+        height: 46px;
+
+        border: 0;
+
+        background: transparent;
+
+        border-radius: 10px;
+
+        font-size: 22px;
+
+        touch-action: manipulation;
+
+    }
 
 }
