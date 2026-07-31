@@ -1,7 +1,8 @@
-/* =====================================================
+/* =========================================================
    SmartPrint by AppDIGI
-   Main UI Style
-===================================================== */
+   Main Style
+   Responsive Desktop + Mobile
+========================================================= */
 
 * {
     box-sizing: border-box;
@@ -14,293 +15,86 @@ body {
     width: 100%;
     min-height: 100%;
     font-family: Arial, Helvetica, sans-serif;
-    background: #f3f4f6;
-    color: #1f2937;
+    background: #f1f3f6;
+    color: #172033;
 }
 
-/* =====================================================
-   HEADER
-===================================================== */
+body {
+    overflow-x: hidden;
+}
 
-header,
-.topbar,
-.app-header {
-    height: 50px;
-    min-height: 50px;
-    background: #ffc400;
+/* =========================================================
+   TOPBAR
+========================================================= */
+
+.topbar {
+    height: 64px;
+    width: 100%;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 16px;
+
+    padding: 8px 20px;
+
+    background: #ffffff;
+    border-bottom: 1px solid #dfe3e8;
+
+    position: sticky;
+    top: 0;
+    z-index: 1000;
 }
 
-header img,
-.topbar img,
-.app-header img {
-    width: 32px;
-    height: 32px;
-    object-fit: contain;
-}
+/* LOGO */
 
-.logo {
-    width: 34px !important;
-    height: 34px !important;
-    object-fit: contain;
-}
-
-.brand {
+.logo-area {
     display: flex;
     align-items: center;
-    gap: 8px;
-}
-
-.brand-text {
-    display: flex;
-    flex-direction: column;
-}
-
-.brand-title {
-    font-size: 18px;
-    font-weight: 700;
-    line-height: 1;
-}
-
-.brand-subtitle {
-    font-size: 10px;
-    margin-top: 3px;
-}
-
-/* =====================================================
-   MAIN APP
-===================================================== */
-
-.app,
-.app-container,
-.workspace {
-    display: grid;
-    grid-template-columns: 110px minmax(0, 1fr) 190px;
     gap: 10px;
-    padding: 10px;
-    width: 100%;
-    min-height: calc(100vh - 50px);
-}
-
-/* =====================================================
-   SIDEBAR
-===================================================== */
-
-.sidebar {
-    background: #ffffff;
-    border-radius: 10px;
-    padding: 8px;
-    box-shadow: 0 1px 5px rgba(0,0,0,.08);
-}
-
-.sidebar button,
-.sidebar a,
-.nav-button {
-    width: 100%;
-    min-height: 34px;
-    margin-bottom: 5px;
-    padding: 7px 8px;
-    border: 0;
-    border-radius: 7px;
-    background: transparent;
-    text-align: left;
-    font-size: 11px;
-    cursor: pointer;
-}
-
-.sidebar button:hover,
-.sidebar a:hover,
-.nav-button:hover {
-    background: #f3f4f6;
-}
-
-.sidebar .active {
-    background: #ffc400;
-    font-weight: 600;
-}
-
-/* =====================================================
-   CENTER
-===================================================== */
-
-.main,
-.main-content,
-.workspace-center {
     min-width: 0;
-    background: #ffffff;
-    border-radius: 10px;
-    padding: 10px;
-    box-shadow: 0 1px 5px rgba(0,0,0,.08);
 }
 
-/* =====================================================
-   PREVIEW HEADER
-===================================================== */
+.logo-area img {
+    width: 44px;
+    height: 44px;
 
-.preview-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 7px;
+    max-width: 44px;
+    max-height: 44px;
+
+    object-fit: contain;
 }
 
-.preview-title {
-    font-size: 15px;
+.logo-area h1 {
+    margin: 0;
+
+    font-size: 20px;
+    line-height: 22px;
     font-weight: 700;
 }
 
-/* =====================================================
-   PREVIEW TOOLBAR
-===================================================== */
+.logo-area span {
+    display: block;
 
-.preview-toolbar {
+    font-size: 10px;
+    color: #64748b;
+
+    margin-top: 1px;
+}
+
+/* STATUS */
+
+.status {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
-    gap: 5px;
-    margin-bottom: 8px;
-}
+    gap: 7px;
 
-.preview-toolbar button,
-.preview-controls button {
-    height: 32px;
-    min-width: 34px;
-    padding: 0 10px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    background: #ffffff;
-    color: #111827;
     font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.preview-toolbar button:hover,
-.preview-controls button:hover {
-    background: #f3f4f6;
-}
-
-.preview-toolbar .primary {
-    background: #ffc400;
-    border-color: #e5a900;
-}
-
-/* =====================================================
-   PREVIEW AREA
-===================================================== */
-
-#preview {
-    position: relative;
-    width: 100%;
-    height: calc(100vh - 145px);
-    min-height: 350px;
-    overflow: auto;
-    border: 1px solid #d1d5db;
-    border-radius: 8px;
-    background: #fafafa;
-}
-
-#previewCanvas {
-    display: block;
-    margin: 20px auto;
-    touch-action: none;
-    cursor: grab;
-}
-
-#previewCanvas:active {
-    cursor: grabbing;
-}
-
-/* =====================================================
-   FILE AREA
-===================================================== */
-
-.file-panel {
-    margin-top: 8px;
-    padding: 7px;
-    border: 1px solid #e5e7eb;
-    border-radius: 7px;
-    background: #ffffff;
-}
-
-.file-panel input[type="file"] {
-    width: 100%;
-    font-size: 12px;
-}
-
-/* =====================================================
-   PRINTER PANEL
-===================================================== */
-
-.printer-panel {
-    background: #ffffff;
-    border-radius: 10px;
-    padding: 10px;
-    box-shadow: 0 1px 5px rgba(0,0,0,.08);
-}
-
-.printer-panel h3 {
-    margin: 0 0 12px;
-    font-size: 15px;
-}
-
-.printer-panel label {
-    display: block;
-    margin: 8px 0 4px;
-    font-size: 10px;
-    color: #4b5563;
-}
-
-.printer-panel select,
-.printer-panel input {
-    width: 100%;
-    height: 32px;
-    padding: 5px 7px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    background: #fff;
-    font-size: 11px;
-}
-
-.printer-panel button {
-    width: 100%;
-    height: 34px;
-    margin-top: 7px;
-    border: 0;
-    border-radius: 7px;
-    font-size: 11px;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-#connectBtn {
-    background: #111827;
-    color: #fff;
-}
-
-#printBtn {
-    background: #ffc400;
-    color: #111827;
-}
-
-/* =====================================================
-   STATUS
-===================================================== */
-
-.printer-status {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 10px;
+    white-space: nowrap;
 }
 
 .dot {
-    width: 7px;
-    height: 7px;
+    width: 8px;
+    height: 8px;
+
     border-radius: 50%;
     background: #ef4444;
 }
@@ -309,126 +103,529 @@ header img,
     background: #22c55e;
 }
 
-/* =====================================================
-   HIDE DUPLICATE FILE INPUT
-===================================================== */
+/* =========================================================
+   MAIN CONTAINER
+========================================================= */
 
-input[type="file"] {
-    max-width: 100%;
+.container {
+    width: 100%;
+
+    display: grid;
+
+    grid-template-columns:
+        180px
+        minmax(0, 1fr)
+        250px;
+
+    gap: 12px;
+
+    padding: 12px;
+
+    min-height: calc(100vh - 64px);
 }
 
-/* =====================================================
-   MOBILE
-===================================================== */
+/* =========================================================
+   SIDEBAR
+========================================================= */
 
-@media (max-width: 800px) {
+.sidebar {
+    background: #ffffff;
 
-    header,
-    .topbar,
-    .app-header {
-        height: 54px;
-        min-height: 54px;
-        padding: 0 10px;
-    }
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
 
-    .brand-title {
-        font-size: 16px;
-    }
+    padding: 12px;
 
-    .app,
-    .app-container,
-    .workspace {
-        grid-template-columns: 1fr;
-        padding: 7px;
-        gap: 7px;
-    }
+    display: flex;
+    flex-direction: column;
 
-    .sidebar {
-        display: flex;
-        overflow-x: auto;
-        gap: 5px;
-        padding: 5px;
-    }
+    gap: 8px;
 
-    .sidebar button,
-    .sidebar a,
-    .nav-button {
-        width: auto;
-        min-width: 65px;
-        margin: 0;
-        text-align: center;
-        white-space: nowrap;
-        font-size: 11px;
-    }
+    height: fit-content;
 
-    .printer-panel {
-        order: 3;
-    }
-
-    .main,
-    .main-content,
-    .workspace-center {
-        order: 1;
-    }
-
-    .sidebar {
-        order: 2;
-    }
-
-    #preview {
-        height: 55vh;
-        min-height: 300px;
-    }
-
-    .preview-toolbar {
-        gap: 5px;
-    }
-
-    .preview-toolbar button,
-    .preview-controls button {
-        height: 38px;
-        min-width: 42px;
-        padding: 0 11px;
-        font-size: 12px;
-    }
-
-    .printer-panel button {
-        height: 42px;
-        font-size: 13px;
-    }
-
-    .printer-panel select,
-    .printer-panel input {
-        height: 38px;
-        font-size: 12px;
-    }
+    position: sticky;
+    top: 76px;
 }
 
-/* =====================================================
-   SMALL PHONE
-===================================================== */
+/* MENU */
 
-@media (max-width: 480px) {
+.menu {
+    width: 100%;
+    min-height: 40px;
 
-    .brand-subtitle {
-        display: none;
+    border: 0;
+    border-radius: 8px;
+
+    background: transparent;
+
+    color: #334155;
+
+    text-align: left;
+
+    padding: 9px 11px;
+
+    font-size: 13px;
+    font-weight: 500;
+
+    cursor: pointer;
+
+    transition:
+        background .15s ease,
+        color .15s ease,
+        transform .1s ease;
+}
+
+.menu:hover {
+    background: #eef4ff;
+    color: #1d4ed8;
+}
+
+.menu.active {
+    background: #2563eb;
+    color: #ffffff;
+}
+
+.menu:active {
+    transform: scale(.98);
+}
+
+/* =========================================================
+   WORKSPACE
+========================================================= */
+
+.workspace {
+    min-width: 0;
+    width: 100%;
+}
+
+/* =========================================================
+   PREVIEW CARD
+========================================================= */
+
+.preview-card {
+    width: 100%;
+
+    background: #ffffff;
+
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+
+    padding: 14px;
+
+    min-height: calc(100vh - 88px);
+
+    display: flex;
+    flex-direction: column;
+}
+
+.preview-card h2 {
+    margin: 0 0 10px;
+
+    font-size: 18px;
+    font-weight: 700;
+}
+
+/* =========================================================
+   TOOLBAR
+========================================================= */
+
+.toolbar {
+    display: flex;
+    align-items: center;
+
+    flex-wrap: wrap;
+
+    gap: 6px;
+
+    margin-bottom: 10px;
+}
+
+/* TOOLBAR BUTTON */
+
+.toolbar button {
+    min-width: 42px;
+    height: 36px;
+
+    padding: 0 11px;
+
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+
+    background: #ffffff;
+
+    color: #1e293b;
+
+    font-size: 13px;
+    font-weight: 600;
+
+    cursor: pointer;
+
+    transition:
+        background .15s ease,
+        border-color .15s ease,
+        color .15s ease,
+        transform .1s ease;
+}
+
+.toolbar button:hover {
+    background: #eff6ff;
+    border-color: #2563eb;
+    color: #1d4ed8;
+}
+
+.toolbar button:active {
+    transform: scale(.96);
+}
+
+/* ZOOM VALUE */
+
+#zoomValue {
+    min-width: 52px;
+
+    height: 36px;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 0 8px;
+
+    border: 1px solid #e2e8f0;
+    border-radius: 7px;
+
+    background: #f8fafc;
+
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* =========================================================
+   PREVIEW AREA
+========================================================= */
+
+#preview {
+    position: relative;
+
+    width: 100%;
+
+    flex: 1;
+
+    min-height: 420px;
+
+    max-height: calc(100vh - 220px);
+
+    overflow: auto;
+
+    border: 1px dashed #cbd5e1;
+    border-radius: 9px;
+
+    background:
+        linear-gradient(
+            45deg,
+            #fafafa 25%,
+            transparent 25%
+        ),
+        linear-gradient(
+            -45deg,
+            #fafafa 25%,
+            transparent 25%
+        ),
+        linear-gradient(
+            45deg,
+            transparent 75%,
+            #fafafa 75%
+        ),
+        linear-gradient(
+            -45deg,
+            transparent 75%,
+            #fafafa 75%
+        );
+
+    background-size: 20px 20px;
+    background-position:
+        0 0,
+        0 10px,
+        10px -10px,
+        -10px 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* EMPTY */
+
+.preview-empty {
+    color: #94a3b8;
+
+    font-size: 14px;
+
+    text-align: center;
+
+    pointer-events: none;
+}
+
+/* CANVAS */
+
+#preview canvas {
+    display: block;
+
+    flex-shrink: 0;
+
+    max-width: none;
+
+    touch-action: none;
+
+    user-select: none;
+
+    -webkit-user-select: none;
+}
+
+/* =========================================================
+   FILE AREA
+========================================================= */
+
+.file-area {
+    width: 100%;
+
+    display: flex;
+    align-items: center;
+
+    gap: 8px;
+
+    margin-top: 10px;
+}
+
+/* HIDE REAL FILE INPUT */
+
+#fileInput {
+    display: none;
+}
+
+/* UPLOAD + CLEAR */
+
+#uploadBtn,
+#clearFileBtn {
+    min-height: 40px;
+
+    border-radius: 8px;
+
+    padding: 0 15px;
+
+    border: 1px solid #cbd5e1;
+
+    background: #ffffff;
+
+    color: #1e293b;
+
+    font-size: 13px;
+    font-weight: 600;
+
+    cursor: pointer;
+}
+
+#uploadBtn {
+    background: #2563eb;
+    color: #ffffff;
+    border-color: #2563eb;
+}
+
+#uploadBtn:hover {
+    background: #1d4ed8;
+}
+
+#clearFileBtn:hover {
+    background: #f1f5f9;
+}
+
+/* =========================================================
+   PRINTER PANEL
+========================================================= */
+
+.panel {
+    background: #ffffff;
+
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+
+    padding: 14px;
+
+    height: fit-content;
+
+    position: sticky;
+    top: 76px;
+}
+
+.panel h2 {
+    margin: 0 0 15px;
+
+    font-size: 18px;
+}
+
+/* LABEL */
+
+.panel label {
+    display: block;
+
+    margin-top: 11px;
+    margin-bottom: 5px;
+
+    font-size: 11px;
+    font-weight: 600;
+
+    color: #475569;
+}
+
+/* SELECT */
+
+.panel select,
+.panel input[type="number"] {
+    width: 100%;
+
+    height: 38px;
+
+    padding: 0 9px;
+
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+
+    background: #ffffff;
+
+    color: #1e293b;
+
+    font-size: 12px;
+
+    outline: none;
+}
+
+.panel select:focus,
+.panel input[type="number"]:focus {
+    border-color: #2563eb;
+}
+
+/* DENSITY */
+
+.panel input[type="range"] {
+    width: 100%;
+
+    margin: 7px 0 2px;
+
+    accent-color: #2563eb;
+}
+
+#densityValue {
+    display: block;
+
+    font-size: 11px;
+
+    color: #64748b;
+
+    margin-bottom: 4px;
+}
+
+/* =========================================================
+   PRINTER BUTTONS
+========================================================= */
+
+.buttons {
+    display: flex;
+    flex-direction: column;
+
+    gap: 7px;
+
+    margin-top: 15px;
+}
+
+.buttons button {
+    width: 100%;
+
+    min-height: 40px;
+
+    border: 0;
+    border-radius: 8px;
+
+    font-size: 12px;
+    font-weight: 700;
+
+    cursor: pointer;
+
+    transition:
+        transform .1s ease,
+        opacity .15s ease;
+}
+
+.buttons button:active {
+    transform: scale(.98);
+}
+
+#connectBtn {
+    background: #172033;
+    color: #ffffff;
+}
+
+#printBtn {
+    background: #2563eb;
+    color: #ffffff;
+}
+
+.buttons button:hover {
+    opacity: .9;
+}
+
+/* =========================================================
+   BOTTOM NAV
+========================================================= */
+
+.bottom-nav {
+    display: none;
+}
+
+/* =========================================================
+   INSTALL BUTTON
+========================================================= */
+
+.install-btn {
+    color: #2563eb;
+}
+
+/* =========================================================
+   SCROLLBAR
+========================================================= */
+
+#preview::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+}
+
+#preview::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+#preview::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 10px;
+}
+
+#preview::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+/* =========================================================
+   TABLET
+========================================================= */
+
+@media (max-width: 1100px) {
+
+    .container {
+        grid-template-columns:
+            150px
+            minmax(0, 1fr)
+            220px;
     }
 
-    .preview-toolbar {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 5px;
-    }
-
-    .preview-toolbar button,
-    .preview-controls button {
-        width: 100%;
-        min-width: 0;
-        padding: 0 5px;
-    }
-
-    #preview {
-        height: 50vh;
+    .toolbar button {
+        min-width: 40px;
+        padding: 0 9px;
     }
 
 }
