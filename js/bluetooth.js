@@ -1,8 +1,8 @@
 /*
 =========================================================
-SmartPrint by AppDIGI
-Bluetooth Engine v3.0
-BLE Printer Engine
+ SmartPrint by AppDIGI
+ Bluetooth Engine v3.0
+ BLE Diagnostic + Printer Connection + Test Connection
 =========================================================
 */
 
@@ -10,6 +10,10 @@ BLE Printer Engine
 
 
 const Bluetooth = {
+
+    // =================================================
+    // STATE
+    // =================================================
 
     device: null,
 
@@ -21,30 +25,264 @@ const Bluetooth = {
 
     connected: false,
 
+    lastDiagnostic: null,
+
 
     // =================================================
-    // CHECK SUPPORT
+    // KNOWN PRINTER SERVICES
+    // =================================================
+
+    SERVICE_UUIDS: [
+
+        "000018f0-0000-1000-8000-00805f9b34fb",
+
+        "0000ffe0-0000-1000-8000-00805f9b34fb",
+
+        "0000ff00-0000-1000-8000-00805f9b34fb"
+
+    ],
+
+
+    // =================================================
+    // INIT
+    // =================================================
+
+    init() {
+
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            "SmartPrint Bluetooth Engine v3.0"
+        );
+
+        console.log(
+            "========================================"
+        );
+
+
+        this.createDiagnosticUI();
+
+        this.bindButtons();
+
+        this.updateStatus(false);
+
+    },
+
+
+    // =================================================
+    // WEB BLUETOOTH SUPPORT
     // =================================================
 
     isSupported() {
 
-        if (!navigator.bluetooth) {
+        return (
+            typeof navigator !== "undefined" &&
+            "bluetooth" in navigator
+        );
 
-            console.error(
-                "Web Bluetooth tidak didukung browser ini."
-            );
+    },
 
-            this.updateStatus(false);
 
-            return false;
+    // =================================================
+    // CREATE UI
+    // =================================================
+
+    createDiagnosticUI() {
+
+        /*
+        Jangan membuat UI berulang.
+        */
+
+        if (
+            document.getElementById(
+                "bluetoothTools"
+            )
+        ) {
+
+            return;
 
         }
 
-        console.log(
-            "Bluetooth API tersedia."
-        );
 
-        return true;
+        const panel =
+            document.querySelector(
+                ".panel"
+            );
+
+
+        if (!panel) {
+
+            console.warn(
+                "Bluetooth UI: panel printer tidak ditemukan."
+            );
+
+            return;
+
+        }
+
+
+        const box =
+            document.createElement(
+                "div"
+            );
+
+
+        box.id =
+            "bluetoothTools";
+
+
+        box.className =
+            "bluetooth-tools";
+
+
+        box.innerHTML = `
+
+            <div class="bluetooth-tools-title">
+                Bluetooth
+            </div>
+
+            <button
+                type="button"
+                id="bluetoothDiagnosticBtn">
+
+                🔎 Diagnostic
+
+            </button>
+
+            <button
+                type="button"
+                id="bluetoothTestBtn">
+
+                🧪 Test Connection
+
+            </button>
+
+            <button
+                type="button"
+                id="bluetoothDisconnectBtn">
+
+                🔌 Disconnect
+
+            </button>
+
+            <div
+                id="bluetoothDiagnosticResult"
+                class="bluetooth-diagnostic-result">
+
+                Bluetooth belum diperiksa.
+
+            </div>
+
+        `;
+
+
+        panel.appendChild(box);
+
+    },
+
+
+    // =================================================
+    // BIND BUTTONS
+    // =================================================
+
+    bindButtons() {
+
+        const connectBtn =
+            document.getElementById(
+                "connectBtn"
+            );
+
+
+        const diagnosticBtn =
+            document.getElementById(
+                "bluetoothDiagnosticBtn"
+            );
+
+
+        const testBtn =
+            document.getElementById(
+                "bluetoothTestBtn"
+            );
+
+
+        const disconnectBtn =
+            document.getElementById(
+                "bluetoothDisconnectBtn"
+            );
+
+
+        // ---------------------------------------------
+        // CONNECT
+        // ---------------------------------------------
+
+        if (connectBtn) {
+
+            connectBtn.addEventListener(
+                "click",
+                async () => {
+
+                    await this.connect();
+
+                }
+            );
+
+        }
+
+
+        // ---------------------------------------------
+        // DIAGNOSTIC
+        // ---------------------------------------------
+
+        if (diagnosticBtn) {
+
+            diagnosticBtn.addEventListener(
+                "click",
+                async () => {
+
+                    await this.diagnostic();
+
+                }
+            );
+
+        }
+
+
+        // ---------------------------------------------
+        // TEST
+        // ---------------------------------------------
+
+        if (testBtn) {
+
+            testBtn.addEventListener(
+                "click",
+                async () => {
+
+                    await this.testConnection();
+
+                }
+            );
+
+        }
+
+
+        // ---------------------------------------------
+        // DISCONNECT
+        // ---------------------------------------------
+
+        if (disconnectBtn) {
+
+            disconnectBtn.addEventListener(
+                "click",
+                () => {
+
+                    this.disconnect();
+
+                }
+            );
+
+        }
 
     },
 
@@ -58,72 +296,56 @@ const Bluetooth = {
         try {
 
             console.log(
-                "================================"
+                "----------------------------------------"
             );
 
             console.log(
-                "SmartPrint Bluetooth"
+                "BLUETOOTH CONNECT"
             );
 
             console.log(
-                "Searching Bluetooth Printer..."
+                "----------------------------------------"
             );
 
-            console.log(
-                "================================"
-            );
-
-
-            // -----------------------------------------
-            // CHECK API
-            // -----------------------------------------
 
             if (!this.isSupported()) {
 
+                this.showDiagnostic(
+                    "❌ Web Bluetooth tidak didukung browser.",
+                    "error"
+                );
+
                 throw new Error(
-                    "Web Bluetooth tidak didukung browser."
+                    "Web Bluetooth tidak didukung."
                 );
 
             }
 
 
-            // -----------------------------------------
-            // RESET CONNECTION
-            // -----------------------------------------
-
-            this.service = null;
-
-            this.characteristic = null;
-
-
-            // -----------------------------------------
-            // REQUEST DEVICE
-            // -----------------------------------------
-
             console.log(
-                "Membuka Bluetooth Device Picker..."
+                "Opening Bluetooth Device Picker..."
             );
 
+
+            /*
+            Penting:
+
+            acceptAllDevices digunakan untuk diagnostic
+            karena kita belum mengetahui UUID BLE printer.
+            */
 
             this.device =
                 await navigator.bluetooth.requestDevice({
 
                     acceptAllDevices: true,
 
-                    optionalServices: [
-                        "000018f0-0000-1000-8000-00805f9b34fb",
-                        "0000ffe0-0000-1000-8000-00805f9b34fb",
-                        "0000ff00-0000-1000-8000-00805f9b34fb"
-                    ]
+                    optionalServices:
+                        this.SERVICE_UUIDS
 
                 });
 
 
             if (!this.device) {
-
-                console.warn(
-                    "Tidak ada device dipilih."
-                );
 
                 return false;
 
@@ -131,17 +353,28 @@ const Bluetooth = {
 
 
             console.log(
-                "Device dipilih:"
+                "Device selected:"
             );
 
             console.log(
                 "Name:",
-                this.device.name
+                this.device.name ||
+                "(Unnamed)"
             );
 
             console.log(
                 "ID:",
                 this.device.id
+            );
+
+
+            this.showDiagnostic(
+                "🔵 Device dipilih: " +
+                (
+                    this.device.name ||
+                    "Unnamed Device"
+                ),
+                "info"
             );
 
 
@@ -154,7 +387,7 @@ const Bluetooth = {
                 () => {
 
                     console.warn(
-                        "Printer Bluetooth disconnected."
+                        "Printer disconnected."
                     );
 
                     this.connected = false;
@@ -167,26 +400,27 @@ const Bluetooth = {
 
                     this.updateStatus(false);
 
+                    this.showDiagnostic(
+                        "⚠ Printer disconnected.",
+                        "warning"
+                    );
+
                 }
             );
 
 
             // -----------------------------------------
-            // CHECK GATT
+            // GATT
             // -----------------------------------------
 
             if (!this.device.gatt) {
 
                 throw new Error(
-                    "Device tidak menyediakan GATT."
+                    "Device tidak memiliki GATT."
                 );
 
             }
 
-
-            // -----------------------------------------
-            // CONNECT GATT
-            // -----------------------------------------
 
             console.log(
                 "Connecting GATT..."
@@ -197,7 +431,10 @@ const Bluetooth = {
                 await this.device.gatt.connect();
 
 
-            if (!this.server.connected) {
+            if (
+                !this.server ||
+                !this.server.connected
+            ) {
 
                 throw new Error(
                     "GATT gagal terhubung."
@@ -212,35 +449,35 @@ const Bluetooth = {
 
 
             // -----------------------------------------
-            // GET SERVICES
+            // FIND SERVICES
             // -----------------------------------------
-
-            console.log(
-                "Mencari Primary Services..."
-            );
-
 
             const services =
                 await this.server.getPrimaryServices();
 
 
+            console.log(
+                "Primary Services:",
+                services.length
+            );
+
+
             if (!services.length) {
 
                 throw new Error(
-                    "Tidak ada Primary Service ditemukan."
+                    "Tidak ada Primary Service."
                 );
 
             }
 
 
-            console.log(
-                "Jumlah Service:",
-                services.length
-            );
+            this.service = null;
+
+            this.characteristic = null;
 
 
             // -----------------------------------------
-            // SCAN ALL SERVICES
+            // SCAN SERVICES
             // -----------------------------------------
 
             for (
@@ -254,18 +491,18 @@ const Bluetooth = {
                 );
 
 
-                let characteristics = [];
+                let chars;
 
 
                 try {
 
-                    characteristics =
+                    chars =
                         await service.getCharacteristics();
 
                 } catch (error) {
 
                     console.warn(
-                        "Gagal membaca characteristic:",
+                        "Cannot read characteristics:",
                         service.uuid,
                         error
                     );
@@ -276,35 +513,30 @@ const Bluetooth = {
 
 
                 for (
-                    const characteristic
-                    of characteristics
+                    const char
+                    of chars
                 ) {
 
                     console.log(
-                        "  CHARACTERISTIC:",
-                        characteristic.uuid
+                        " CHARACTERISTIC:",
+                        char.uuid
                     );
-
 
                     console.log(
-                        "  PROPERTIES:",
-                        characteristic.properties
+                        " PROPERTIES:",
+                        char.properties
                     );
 
 
-                    // ---------------------------------
-                    // FIND WRITE CHARACTERISTIC
-                    // ---------------------------------
+                    const writable =
 
-                    const canWrite =
+                        char.properties.write ||
 
-                        characteristic.properties.write ||
-
-                        characteristic.properties.writeWithoutResponse;
+                        char.properties.writeWithoutResponse;
 
 
                     if (
-                        canWrite &&
+                        writable &&
                         !this.characteristic
                     ) {
 
@@ -312,35 +544,7 @@ const Bluetooth = {
                             service;
 
                         this.characteristic =
-                            characteristic;
-
-
-                        console.log(
-                            "================================"
-                        );
-
-                        console.log(
-                            "WRITE CHARACTERISTIC FOUND"
-                        );
-
-                        console.log(
-                            "Service:",
-                            service.uuid
-                        );
-
-                        console.log(
-                            "Characteristic:",
-                            characteristic.uuid
-                        );
-
-                        console.log(
-                            "Properties:",
-                            characteristic.properties
-                        );
-
-                        console.log(
-                            "================================"
-                        );
+                            char;
 
                     }
 
@@ -350,34 +554,44 @@ const Bluetooth = {
 
 
             // -----------------------------------------
-            // CHECK WRITE CHARACTERISTIC
+            // NO WRITE CHARACTERISTIC
             // -----------------------------------------
 
             if (!this.characteristic) {
 
-                console.error(
-                    "Tidak ditemukan characteristic WRITE."
+                console.warn(
+                    "GATT connected tetapi WRITE characteristic tidak ditemukan."
                 );
 
 
-                throw new Error(
-                    "Printer terhubung tetapi tidak ditemukan Bluetooth WRITE characteristic."
+                this.connected = false;
+
+                this.updateStatus(false);
+
+
+                this.showDiagnostic(
+                    "⚠ BLE device terhubung, tetapi WRITE characteristic tidak ditemukan.",
+                    "warning"
                 );
+
+
+                return false;
 
             }
 
 
             // -----------------------------------------
-            // CONNECTED
+            // SUCCESS
             // -----------------------------------------
 
             this.connected = true;
+
 
             this.updateStatus(true);
 
 
             console.log(
-                "================================"
+                "========================================"
             );
 
             console.log(
@@ -400,7 +614,17 @@ const Bluetooth = {
             );
 
             console.log(
-                "================================"
+                "========================================"
+            );
+
+
+            this.showDiagnostic(
+                "✅ Printer Connected: " +
+                (
+                    this.device.name ||
+                    "Unnamed"
+                ),
+                "success"
             );
 
 
@@ -411,50 +635,532 @@ const Bluetooth = {
 
 
             console.error(
-                "================================"
-            );
-
-            console.error(
-                "BLUETOOTH ERROR"
-            );
-
-            console.error(
+                "Bluetooth Connect Error:",
                 error
-            );
-
-            console.error(
-                "Name:",
-                error.name
-            );
-
-            console.error(
-                "Message:",
-                error.message
-            );
-
-            console.error(
-                "================================"
             );
 
 
             this.connected = false;
 
+
             this.updateStatus(false);
 
 
-            // User cancel
             if (
                 error.name ===
                 "NotFoundError"
             ) {
 
-                console.log(
-                    "Bluetooth device picker dibatalkan."
+                this.showDiagnostic(
+                    "⚠ Tidak ada perangkat dipilih atau perangkat BLE tidak tersedia.",
+                    "warning"
                 );
+
 
                 return false;
 
             }
+
+
+            this.showDiagnostic(
+                "❌ " +
+                (
+                    error.message ||
+                    "Bluetooth connection error."
+                ),
+                "error"
+            );
+
+
+            return false;
+
+        }
+
+    },
+
+
+    // =================================================
+    // DIAGNOSTIC
+    // =================================================
+
+    async diagnostic() {
+
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            "SMARTPRINT BLUETOOTH DIAGNOSTIC"
+        );
+
+        console.log(
+            "========================================"
+        );
+
+
+        const result = {
+
+            webBluetooth: false,
+
+            secureContext: false,
+
+            device: null,
+
+            gatt: false,
+
+            services: [],
+
+            writableCharacteristics: [],
+
+            possibleClassic: false,
+
+            message: ""
+
+        };
+
+
+        // ---------------------------------------------
+        // SECURE CONTEXT
+        // ---------------------------------------------
+
+        result.secureContext =
+            window.isSecureContext;
+
+
+        console.log(
+            "Secure Context:",
+            result.secureContext
+        );
+
+
+        if (!result.secureContext) {
+
+            result.message =
+                "HTTPS diperlukan untuk Web Bluetooth.";
+
+            this.lastDiagnostic =
+                result;
+
+            this.showDiagnostic(
+                "❌ HTTPS / Secure Context tidak tersedia.",
+                "error"
+            );
+
+            return result;
+
+        }
+
+
+        // ---------------------------------------------
+        // WEB BLUETOOTH
+        // ---------------------------------------------
+
+        result.webBluetooth =
+            this.isSupported();
+
+
+        console.log(
+            "Web Bluetooth:",
+            result.webBluetooth
+        );
+
+
+        if (!result.webBluetooth) {
+
+            result.message =
+                "Browser tidak mendukung Web Bluetooth.";
+
+            this.lastDiagnostic =
+                result;
+
+            this.showDiagnostic(
+                "❌ Browser tidak mendukung Web Bluetooth.",
+                "error"
+            );
+
+            return result;
+
+        }
+
+
+        // ---------------------------------------------
+        // REQUEST DEVICE
+        // ---------------------------------------------
+
+        try {
+
+            this.showDiagnostic(
+                "🔎 Membuka Bluetooth Diagnostic...",
+                "info"
+            );
+
+
+            const device =
+                await navigator.bluetooth.requestDevice({
+
+                    acceptAllDevices: true,
+
+                    optionalServices:
+                        this.SERVICE_UUIDS
+
+                });
+
+
+            result.device =
+                device;
+
+
+            console.log(
+                "Device:",
+                device.name ||
+                "Unnamed"
+            );
+
+
+            // -----------------------------------------
+            // DISCONNECT LISTENER
+            // -----------------------------------------
+
+            device.addEventListener(
+                "gattserverdisconnected",
+                () => {
+
+                    console.log(
+                        "Diagnostic device disconnected."
+                    );
+
+                }
+            );
+
+
+            // -----------------------------------------
+            // GATT CONNECT
+            // -----------------------------------------
+
+            if (
+                device.gatt
+            ) {
+
+                try {
+
+                    const server =
+                        await device.gatt.connect();
+
+
+                    result.gatt =
+                        server.connected;
+
+
+                    console.log(
+                        "GATT Connected:",
+                        result.gatt
+                    );
+
+
+                    if (result.gatt) {
+
+                        const services =
+                            await server.getPrimaryServices();
+
+
+                        for (
+                            const service
+                            of services
+                        ) {
+
+                            result.services.push(
+                                service.uuid
+                            );
+
+
+                            console.log(
+                                "Service:",
+                                service.uuid
+                            );
+
+
+                            let chars = [];
+
+
+                            try {
+
+                                chars =
+                                    await service.getCharacteristics();
+
+                            } catch {
+
+                                continue;
+
+                            }
+
+
+                            for (
+                                const char
+                                of chars
+                            ) {
+
+                                const writable =
+
+                                    char.properties.write ||
+
+                                    char.properties.writeWithoutResponse;
+
+
+                                if (writable) {
+
+                                    result.writableCharacteristics.push({
+
+                                        service:
+                                            service.uuid,
+
+                                        characteristic:
+                                            char.uuid,
+
+                                        properties:
+                                            char.properties
+
+                                    });
+
+                                }
+
+                            }
+
+                        }
+
+                    }
+
+                } catch (error) {
+
+                    console.warn(
+                        "GATT diagnostic failed:",
+                        error
+                    );
+
+                }
+
+            }
+
+
+            // -----------------------------------------
+            // DETERMINE RESULT
+            // -----------------------------------------
+
+            if (
+                result.gatt &&
+                result.writableCharacteristics.length
+            ) {
+
+                result.message =
+                    "BLE printer terdeteksi dan memiliki WRITE characteristic.";
+
+
+                this.showDiagnostic(
+                    "✅ BLE Printer terdeteksi dan siap diuji.",
+                    "success"
+                );
+
+            }
+
+            else if (
+                result.gatt
+            ) {
+
+                result.message =
+                    "BLE device terhubung tetapi WRITE characteristic tidak ditemukan.";
+
+
+                this.showDiagnostic(
+                    "⚠ BLE terdeteksi tetapi WRITE characteristic tidak ditemukan.",
+                    "warning"
+                );
+
+            }
+
+            else {
+
+                result.possibleClassic =
+                    true;
+
+
+                result.message =
+                    "Perangkat tidak dapat digunakan melalui GATT. Kemungkinan Bluetooth Classic/SPP atau perangkat tidak kompatibel.";
+
+
+                this.showDiagnostic(
+                    "⚠ Tidak dapat terhubung melalui BLE/GATT. Kemungkinan Bluetooth Classic/SPP.",
+                    "warning"
+                );
+
+            }
+
+
+            // -----------------------------------------
+            // DISCONNECT DIAGNOSTIC
+            // -----------------------------------------
+
+            try {
+
+                if (
+                    device.gatt &&
+                    device.gatt.connected
+                ) {
+
+                    device.gatt.disconnect();
+
+                }
+
+            } catch {}
+
+
+
+        } catch (error) {
+
+
+            console.error(
+                "Diagnostic Error:",
+                error
+            );
+
+
+            if (
+                error.name ===
+                "NotFoundError"
+            ) {
+
+                result.message =
+                    "Tidak ada perangkat BLE kompatibel yang ditemukan atau dipilih.";
+
+                result.possibleClassic =
+                    true;
+
+
+                this.showDiagnostic(
+                    "⚠ Tidak ada perangkat BLE kompatibel. Printer mungkin Bluetooth Classic/SPP.",
+                    "warning"
+                );
+
+            }
+
+            else {
+
+                result.message =
+                    error.message;
+
+
+                this.showDiagnostic(
+                    "❌ Diagnostic gagal: " +
+                    error.message,
+                    "error"
+                );
+
+            }
+
+        }
+
+
+        this.lastDiagnostic =
+            result;
+
+
+        console.log(
+            "DIAGNOSTIC RESULT:",
+            result
+        );
+
+
+        return result;
+
+    },
+
+
+    // =================================================
+    // TEST CONNECTION
+    // =================================================
+
+    async testConnection() {
+
+        console.log(
+            "----------------------------------------"
+        );
+
+        console.log(
+            "BLUETOOTH TEST CONNECTION"
+        );
+
+        console.log(
+            "----------------------------------------"
+        );
+
+
+        if (
+            !this.isConnected()
+        ) {
+
+            this.showDiagnostic(
+                "⚠ Printer belum terhubung. Hubungkan printer terlebih dahulu.",
+                "warning"
+            );
+
+
+            console.warn(
+                "Test Connection: printer not connected."
+            );
+
+
+            return false;
+
+        }
+
+
+        try {
+
+            const testData =
+                new Uint8Array([
+
+                    0x1B,
+                    0x40
+
+                ]);
+
+
+            console.log(
+                "Sending ESC/POS initialization..."
+            );
+
+
+            await this.send(
+                testData
+            );
+
+
+            console.log(
+                "Test data sent successfully."
+            );
+
+
+            this.showDiagnostic(
+                "✅ Connection OK. Data berhasil dikirim ke printer.",
+                "success"
+            );
+
+
+            return true;
+
+
+        } catch (error) {
+
+
+            console.error(
+                "Test Connection Error:",
+                error
+            );
+
+
+            this.showDiagnostic(
+                "❌ Test Connection gagal: " +
+                error.message,
+                "error"
+            );
 
 
             return false;
@@ -471,25 +1177,11 @@ const Bluetooth = {
     async send(data) {
 
         if (
-            !this.device ||
-            !this.server ||
-            !this.connected ||
-            !this.characteristic
+            !this.isConnected()
         ) {
 
             throw new Error(
                 "Printer Bluetooth belum terhubung."
-            );
-
-        }
-
-
-        if (
-            !this.server.connected
-        ) {
-
-            throw new Error(
-                "GATT server sudah disconnect."
             );
 
         }
@@ -504,22 +1196,14 @@ const Bluetooth = {
         }
 
 
-        // -----------------------------------------
-        // CONVERT DATA
-        // -----------------------------------------
-
         let buffer;
 
 
+        // ---------------------------------------------
+        // ARRAY BUFFER
+        // ---------------------------------------------
+
         if (
-            data instanceof Uint8Array
-        ) {
-
-            buffer = data;
-
-        }
-
-        else if (
             data instanceof ArrayBuffer
         ) {
 
@@ -527,6 +1211,25 @@ const Bluetooth = {
                 new Uint8Array(data);
 
         }
+
+
+        // ---------------------------------------------
+        // UINT8ARRAY
+        // ---------------------------------------------
+
+        else if (
+            data instanceof Uint8Array
+        ) {
+
+            buffer =
+                data;
+
+        }
+
+
+        // ---------------------------------------------
+        // ARRAY
+        // ---------------------------------------------
 
         else if (
             Array.isArray(data)
@@ -536,6 +1239,7 @@ const Bluetooth = {
                 new Uint8Array(data);
 
         }
+
 
         else {
 
@@ -547,16 +1251,14 @@ const Bluetooth = {
 
 
         console.log(
-            "Sending bytes:",
-            buffer.length
+            "Sending:",
+            buffer.length,
+            "bytes"
         );
 
 
-        // -----------------------------------------
-        // CHUNK
-        // -----------------------------------------
-
-        const chunkSize = 180;
+        const chunkSize =
+            180;
 
 
         for (
@@ -572,16 +1274,17 @@ const Bluetooth = {
                 );
 
 
-            // -------------------------------------
+            // -----------------------------------------
             // WRITE WITHOUT RESPONSE
-            // -------------------------------------
+            // -----------------------------------------
 
             if (
                 this.characteristic
                     .properties
                     .writeWithoutResponse &&
-                this.characteristic
-                    .writeValueWithoutResponse
+                typeof this.characteristic
+                    .writeValueWithoutResponse ===
+                    "function"
             ) {
 
                 await this.characteristic
@@ -591,16 +1294,18 @@ const Bluetooth = {
 
             }
 
-            // -------------------------------------
+
+            // -----------------------------------------
             // WRITE WITH RESPONSE
-            // -------------------------------------
+            // -----------------------------------------
 
             else if (
                 this.characteristic
                     .properties
                     .write &&
-                this.characteristic
-                    .writeValueWithResponse
+                typeof this.characteristic
+                    .writeValueWithResponse ===
+                    "function"
             ) {
 
                 await this.characteristic
@@ -610,9 +1315,10 @@ const Bluetooth = {
 
             }
 
-            // -------------------------------------
-            // OLD API
-            // -------------------------------------
+
+            // -----------------------------------------
+            // LEGACY
+            // -----------------------------------------
 
             else {
 
@@ -624,7 +1330,6 @@ const Bluetooth = {
             }
 
 
-            // Small delay
             await new Promise(
                 resolve =>
                     setTimeout(
@@ -649,6 +1354,11 @@ const Bluetooth = {
 
     disconnect() {
 
+        console.log(
+            "Disconnecting printer..."
+        );
+
+
         try {
 
             if (
@@ -664,7 +1374,7 @@ const Bluetooth = {
         } catch (error) {
 
             console.error(
-                "Disconnect Error:",
+                "Disconnect error:",
                 error
             );
 
@@ -679,7 +1389,14 @@ const Bluetooth = {
 
         this.characteristic = null;
 
+
         this.updateStatus(false);
+
+
+        this.showDiagnostic(
+            "Printer disconnected.",
+            "info"
+        );
 
     },
 
@@ -725,6 +1442,66 @@ const Bluetooth = {
 
 
     // =================================================
+    // SHOW DIAGNOSTIC
+    // =================================================
+
+    showDiagnostic(
+        message,
+        type = "info"
+    ) {
+
+        const box =
+            document.getElementById(
+                "bluetoothDiagnosticResult"
+            );
+
+
+        if (!box) {
+
+            console.log(
+                "Bluetooth Diagnostic:",
+                message
+            );
+
+            return;
+
+        }
+
+
+        box.textContent =
+            message;
+
+
+        box.dataset.type =
+            type;
+
+    },
+
+
+    // =================================================
+    // IS CONNECTED
+    // =================================================
+
+    isConnected() {
+
+        return (
+
+            this.connected === true &&
+
+            !!this.device &&
+
+            !!this.device.gatt &&
+
+            this.device.gatt.connected === true &&
+
+            !!this.characteristic
+
+        );
+
+    },
+
+
+    // =================================================
     // GET DEVICE
     // =================================================
 
@@ -747,22 +1524,35 @@ const Bluetooth = {
 
 
     // =================================================
-    // IS CONNECTED
+    // GET DIAGNOSTIC
     // =================================================
 
-    isConnected() {
+    getDiagnostic() {
 
-        return (
-            this.connected &&
-            this.device &&
-            this.device.gatt &&
-            this.device.gatt.connected
-        );
+        return this.lastDiagnostic;
 
     }
 
 };
 
 
+// =====================================================
+// GLOBAL
+// =====================================================
+
 window.Bluetooth =
     Bluetooth;
+
+
+// =====================================================
+// AUTO INIT
+// =====================================================
+
+document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+
+        Bluetooth.init();
+
+    }
+);
