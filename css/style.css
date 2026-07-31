@@ -627,5 +627,151 @@ body {
         min-width: 40px;
         padding: 0 9px;
     }
+/* =====================================================
+   BARCODE PANEL
+===================================================== */
 
+.smartprint-floating-panel {
+    position: fixed;
+    top: 90px;
+    right: 25px;
+
+    width: 300px;
+
+    background: #ffffff;
+
+    border-radius: 14px;
+
+    box-shadow:
+        0 10px 35px rgba(0,0,0,.20);
+
+    z-index: 9999;
+
+    overflow: hidden;
+
+    font-family:
+        Arial,
+        sans-serif;
+}
+
+
+.barcode-panel-header {
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: space-between;
+
+    padding: 14px 16px;
+
+    background: #2143b5;
+
+    color: #ffffff;
+
+    font-size: 16px;
+
+}
+
+
+.barcode-panel-header button {
+
+    border: none;
+
+    background: transparent;
+
+    color: #ffffff;
+
+    font-size: 24px;
+
+    cursor: pointer;
+
+}
+
+
+.barcode-panel-body {
+
+    padding: 16px;
+
+}
+
+
+.barcode-panel-body label {
+
+    display: block;
+
+    margin-top: 10px;
+
+    margin-bottom: 5px;
+
+    font-size: 12px;
+
+    font-weight: 600;
+
+}
+
+
+.barcode-panel-body input,
+.barcode-panel-body select {
+
+    width: 100%;
+
+    box-sizing: border-box;
+
+    padding: 10px;
+
+    border: 1px solid #d1d5db;
+
+    border-radius: 8px;
+
+    font-size: 14px;
+
+}
+
+
+.barcode-generate {
+
+    width: 100%;
+
+    margin-top: 16px;
+
+    padding: 12px;
+
+    border: none;
+
+    border-radius: 9px;
+
+    background: #2143b5;
+
+    color: #ffffff;
+
+    font-weight: bold;
+
+    cursor: pointer;
+
+}
+
+
+.barcode-generate:hover {
+
+    opacity: .9;
+
+}
+
+
+@media (max-width: 600px) {
+
+    .smartprint-floating-panel {
+
+        top: 75px;
+
+        left: 12px;
+
+        right: 12px;
+
+        width: auto;
+
+    }
+
+}
 }
