@@ -2,13 +2,15 @@
 =================================================
  SmartPrint by AppDIGI
  Service Worker
- Version 2.0
+ Version 3.0
 =================================================
 */
 
 "use strict";
 
-const CACHE_NAME = "smartprint-v3";
+
+const CACHE_NAME = "smartprint-v4";
+
 
 const APP_FILES = [
 
@@ -48,104 +50,197 @@ const APP_FILES = [
 // INSTALL
 // ========================================
 
-self.addEventListener("install", event => {
+self.addEventListener(
+    "install",
+    event => {
 
-    console.log("SmartPrint Service Worker Installed");
+        console.log(
+            "SmartPrint Service Worker Installing"
+        );
 
-    self.skipWaiting();
 
-    event.waitUntil(
+        event.waitUntil(
 
-        caches.open(CACHE_NAME)
+            caches.open(
+                CACHE_NAME
+            )
+            .then(
+                cache => {
 
-        .then(cache => cache.addAll(APP_FILES))
+                    return cache.addAll(
+                        APP_FILES
+                    );
 
-    );
+                }
+            )
+            .then(
+                () => {
 
-});
+                    console.log(
+                        "SmartPrint Cache Created:",
+                        CACHE_NAME
+                    );
+
+                    return self.skipWaiting();
+
+                }
+            )
+
+        );
+
+    }
+);
 
 
 // ========================================
 // ACTIVATE
 // ========================================
 
-self.addEventListener("activate", event => {
+self.addEventListener(
+    "activate",
+    event => {
 
-    console.log("SmartPrint Service Worker Active");
+        console.log(
+            "SmartPrint Service Worker Active"
+        );
 
-    event.waitUntil(
 
-        caches.keys()
+        event.waitUntil(
 
-        .then(keys =>
+            caches.keys()
+            .then(
+                keys => {
 
-            Promise.all(
+                    return Promise.all(
 
-                keys.map(key => {
+                        keys.map(
+                            key => {
 
-                    if (key !== CACHE_NAME) {
+                                if (
+                                    key !== CACHE_NAME
+                                ) {
 
-                        console.log("Delete Cache :", key);
+                                    console.log(
+                                        "Delete Cache:",
+                                        key
+                                    );
 
-                        return caches.delete(key);
 
-                    }
+                                    return caches.delete(
+                                        key
+                                    );
 
-                })
+                                }
 
+                            }
+                        )
+
+                    );
+
+                }
+            )
+            .then(
+                () => {
+
+                    return self.clients.claim();
+
+                }
             )
 
-        )
+        );
 
-    );
-
-    self.clients.claim();
-
-});
+    }
+);
 
 
 // ========================================
 // FETCH
 // ========================================
 
-self.addEventListener("fetch", event => {
+self.addEventListener(
+    "fetch",
+    event => {
 
-    if (event.request.method !== "GET") return;
+        if (
+            event.request.method !== "GET"
+        ) {
 
-    event.respondWith(
+            return;
+        }
 
-        fetch(event.request)
 
-        .then(response => {
+        event.respondWith(
 
-            const clone = response.clone();
+            fetch(
+                event.request
+            )
+            .then(
+                response => {
 
-            caches.open(CACHE_NAME)
+                    /*
+                    =====================================
+                    Hanya cache response yang valid
+                    =====================================
+                    */
 
-            .then(cache => {
+                    if (
+                        response &&
+                        response.status === 200 &&
+                        response.type === "basic"
+                    ) {
 
-                cache.put(event.request, clone);
+                        const clone =
+                            response.clone();
 
-            });
 
-            return response;
+                        caches.open(
+                            CACHE_NAME
+                        )
+                        .then(
+                            cache => {
 
-        })
+                                cache.put(
+                                    event.request,
+                                    clone
+                                );
 
-        .catch(() => {
+                            }
+                        );
 
-            return caches.match(event.request)
+                    }
 
-            .then(response => {
 
-                if (response) return response;
+                    return response;
 
-                return caches.match("./index.html");
+                }
+            )
+            .catch(
+                () => {
 
-            });
+                    return caches.match(
+                        event.request
+                    )
+                    .then(
+                        response => {
 
-        })
+                            if (response) {
 
-    );
+                                return response;
 
-});
+                            }
+
+
+                            return caches.match(
+                                "./index.html"
+                            );
+
+                        }
+                    );
+
+                }
+            )
+
+        );
+
+    }
+);
