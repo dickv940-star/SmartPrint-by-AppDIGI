@@ -1,7 +1,7 @@
 /*
 =========================================================
 SmartPrint by AppDIGI
-Printer Manager v2.0
+Printer Manager v3.0
 =========================================================
 */
 
@@ -10,284 +10,446 @@ Printer Manager v2.0
 
 const Printer = {
 
+    language: "ESC",
 
-language:"ESC",
+    paperWidth: 576,
 
-paperWidth:576,
+    dpi: 203,
 
-dpi:203,
+    copies: 1,
 
-copies:1,
+    connected: false,
 
-connected:false,
 
+    // =================================
+    // CONNECT
+    // =================================
 
+    async connect() {
 
+        console.log("----------------------------------------");
+        console.log("PRINTER MANAGER CONNECT");
+        console.log("----------------------------------------");
 
 
-// =================================
-// CONNECT
-// =================================
+        if (
+            typeof Bluetooth === "undefined"
+        ) {
 
-async connect(){
+            console.error(
+                "Bluetooth Engine tidak ditemukan."
+            );
 
+            this.connected = false;
 
-try{
+            return false;
 
+        }
 
-await Bluetooth.connect();
 
+        try {
 
-this.connected=true;
+            const result =
+                await Bluetooth.connect();
 
 
-console.log(
-"Printer Connected"
-);
+            /*
+            -----------------------------------------
+            Bluetooth.connect() harus mengembalikan
+            true hanya jika benar-benar connected.
+            -----------------------------------------
+            */
 
+            if (!result) {
 
-return true;
+                console.warn(
+                    "Printer connection dibatalkan atau gagal."
+                );
 
+                this.connected = false;
 
-}
+                return false;
 
-catch(error){
+            }
 
 
-console.error(
-"Printer Connect Error",
-error
-);
+            /*
+            -----------------------------------------
+            Verifikasi tambahan
+            -----------------------------------------
+            */
 
+            if (
+                typeof Bluetooth.isConnected === "function"
+            ) {
 
-this.connected=false;
+                if (
+                    !Bluetooth.isConnected()
+                ) {
 
+                    console.warn(
+                        "Bluetooth belum benar-benar connected."
+                    );
 
-throw error;
+                    this.connected = false;
 
+                    return false;
 
-}
+                }
 
+            }
 
-},
 
+            this.connected = true;
 
 
+            console.log(
+                "Printer Connected"
+            );
 
 
+            this.updateStatus(true);
 
 
-// =================================
-// DISCONNECT
-// =================================
+            return true;
 
-disconnect(){
 
+        }
 
-if(
-Bluetooth.disconnect
-){
+        catch (error) {
 
 
-Bluetooth.disconnect();
+            console.error(
+                "Printer Connect Error",
+                error
+            );
 
 
-}
+            this.connected = false;
 
 
-this.connected=false;
+            this.updateStatus(false);
 
 
-},
+            return false;
 
+        }
 
+    },
 
 
+    // =================================
+    // CHECK CONNECTION
+    // =================================
 
+    isConnected() {
 
+        if (!this.connected) {
 
-// =================================
-// PRINT
-// =================================
+            return false;
 
+        }
 
-async print(canvas){
 
+        if (
+            typeof Bluetooth !== "undefined" &&
+            typeof Bluetooth.isConnected === "function"
+        ) {
 
+            return Bluetooth.isConnected();
 
-if(!this.connected){
+        }
 
 
-throw new Error(
-"Printer belum terhubung"
-);
+        return true;
 
+    },
 
-}
 
+    // =================================
+    // DISCONNECT
+    // =================================
 
+    disconnect() {
 
+        console.log(
+            "Printer Disconnect"
+        );
 
 
-let result;
+        try {
 
+            if (
+                typeof Bluetooth !== "undefined" &&
+                typeof Bluetooth.disconnect === "function"
+            ) {
 
+                Bluetooth.disconnect();
 
-switch(this.language){
+            }
 
+        }
 
+        catch (error) {
 
-case "ESC":
+            console.error(
+                "Printer Disconnect Error",
+                error
+            );
 
+        }
 
-result =
-await ESCpos.print(
-canvas,
-this
-);
 
+        this.connected = false;
 
-break;
 
+        this.updateStatus(false);
 
 
+    },
 
 
-case "TSPL":
+    // =================================
+    // PRINT
+    // =================================
 
+    async print(canvas) {
 
-result =
-await TSPL.print(
-canvas,
-this
-);
 
+        /*
+        -----------------------------------------
+        Jangan print jika belum benar-benar
+        connected.
+        -----------------------------------------
+        */
 
-break;
+        if (!this.isConnected()) {
 
+            throw new Error(
+                "Printer belum terhubung."
+            );
 
+        }
 
 
+        if (!canvas) {
 
-case "ZPL":
+            throw new Error(
+                "Canvas tidak tersedia."
+            );
 
+        }
 
-result =
-await ZPL.print(
-canvas,
-this
-);
 
+        let result;
 
-break;
 
+        switch (this.language) {
 
 
+            case "ESC":
 
 
-case "CPCL":
+                if (
+                    typeof ESCpos === "undefined"
+                ) {
 
+                    throw new Error(
+                        "ESCpos Engine tidak ditemukan."
+                    );
 
-result =
-await CPCL.print(
-canvas,
-this
-);
+                }
 
 
-break;
+                result =
+                    await ESCpos.print(
+                        canvas,
+                        this
+                    );
 
 
+                break;
 
 
+            case "TSPL":
 
-default:
 
+                if (
+                    typeof TSPL === "undefined"
+                ) {
 
-throw new Error(
-"Printer language tidak didukung"
-);
+                    throw new Error(
+                        "TSPL Engine tidak ditemukan."
+                    );
 
+                }
 
 
-}
+                result =
+                    await TSPL.print(
+                        canvas,
+                        this
+                    );
 
 
+                break;
 
 
+            case "ZPL":
 
 
-return result;
+                if (
+                    typeof ZPL === "undefined"
+                ) {
 
+                    throw new Error(
+                        "ZPL Engine tidak ditemukan."
+                    );
 
-},
+                }
 
 
+                result =
+                    await ZPL.print(
+                        canvas,
+                        this
+                    );
 
 
+                break;
 
 
+            case "CPCL":
 
-// =================================
-// SETTING
-// =================================
 
+                if (
+                    typeof CPCL === "undefined"
+                ) {
 
-setLanguage(lang){
+                    throw new Error(
+                        "CPCL Engine tidak ditemukan."
+                    );
 
+                }
 
-this.language =
-lang;
 
+                result =
+                    await CPCL.print(
+                        canvas,
+                        this
+                    );
 
-},
 
+                break;
 
 
+            default:
 
 
-setPaper(width){
+                throw new Error(
+                    "Printer language tidak didukung: " +
+                    this.language
+                );
 
+        }
 
-this.paperWidth =
-width;
 
+        return result;
 
-},
+    },
 
 
+    // =================================
+    // UPDATE STATUS
+    // =================================
 
+    updateStatus(connected) {
 
 
-setDPI(dpi){
+        const status =
+            document.getElementById(
+                "printerStatus"
+            );
 
 
-this.dpi =
-dpi;
+        const dot =
+            document.querySelector(
+                ".dot"
+            );
 
 
-},
+        if (status) {
 
+            status.innerText =
+                connected
+                    ? "Printer Connected"
+                    : "No Printer";
 
+        }
 
 
+        if (dot) {
 
+            if (connected) {
 
-setCopies(num){
+                dot.classList.add(
+                    "connected"
+                );
 
+            }
 
-this.copies =
-num;
+            else {
 
+                dot.classList.remove(
+                    "connected"
+                );
 
-}
+            }
 
+        }
 
+    },
+
+
+    // =================================
+    // SETTINGS
+    // =================================
+
+    setLanguage(lang) {
+
+        this.language =
+            lang;
+
+    },
+
+
+    setPaper(width) {
+
+        this.paperWidth =
+            width;
+
+    },
+
+
+    setDPI(dpi) {
+
+        this.dpi =
+            dpi;
+
+    },
+
+
+    setCopies(num) {
+
+        this.copies =
+            Math.max(
+                1,
+                Number(num) || 1
+            );
+
+    }
 
 };
-
-
-
 
 
 window.Printer = Printer;
