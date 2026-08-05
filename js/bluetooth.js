@@ -1,37 +1,45 @@
-console.log("Bluetooth JS Loaded");
+"use strict";
 
-// =======================================
-// SmartPrint Bluetooth Manager v3
-// Windows Native Bluetooth COM
-// =======================================
+console.log("SmartPrint TSPL Bluetooth Loaded");
 
 
-let printerPort = null;
-let printerConnected = false;
+let printerDevice = null;
+let printerServer = null;
+let printerWrite = null;
 
 
 // =======================================
-// INIT
+// TSPL SERVICE
 // =======================================
 
-async function initBluetooth(){
+const TSPL_SERVICES = [
 
-    console.log(
-        "SmartPrint Bluetooth Native Init"
-    );
+    "000018f0-0000-1000-8000-00805f9b34fb",
+
+    "0000ffe0-0000-1000-8000-00805f9b34fb",
+
+    "49535343-fe7d-4ae5-8fa9-9fafd205e455"
+
+];
 
 
-    await autoConnectPrinter();
+const TSPL_CHARACTERISTICS = [
 
-}
+    "00002af1-0000-1000-8000-00805f9b34fb",
+
+    "0000ffe1-0000-1000-8000-00805f9b34fb",
+
+    "49535343-8841-43f4-a8d4-ecbe34729bb3"
+
+];
 
 
 
 // =======================================
-// AUTO CONNECT
+// CONNECT TSPL PRINTER
 // =======================================
 
-async function autoConnectPrinter(){
+async function connectPrinter(){
 
 
     const status =
@@ -42,178 +50,128 @@ async function autoConnectPrinter(){
 
 
         status.innerHTML =
-        "🔍 Checking Printer...";
+        "🔍 Scan TSPL Printer...";
 
 
+        printerDevice =
+        await navigator.bluetooth.requestDevice({
 
-        const printers =
-        await window.SmartPrint.scanPrinter();
+            acceptAllDevices:true,
 
-
-
-        console.log(
-            "Printer List:",
-            printers
-        );
-
-
-
-        let saved =
-        localStorage.getItem(
-            "SmartPrint_Printer"
-        );
-
-
-
-        let printer;
-
-
-
-        if(saved){
-
-            printer =
-            printers.find(
-                p =>
-                p.path === saved
-            );
-
-        }
-
-
-
-        if(!printer){
-
-
-            printer =
-            printers.find(
-                p =>
-                p.manufacturer ||
-                p.path
-            );
-
-
-        }
-
-
-
-        if(!printer){
-
-
-            status.innerHTML =
-            "⚪ Printer Tidak Ditemukan";
-
-
-            return;
-
-
-        }
-
-
-
-        printerPort =
-        printer.path;
-
-
-
-        printerConnected =
-        true;
-
-
-
-        localStorage.setItem(
-            "SmartPrint_Printer",
-            printerPort
-        );
-
-
-
-        status.innerHTML =
-        "🟢 Printer Connected : "
-        +
-        printerPort;
-
-
-
-        console.log(
-            "CONNECTED",
-            printerPort
-        );
-
-
-    }
-
-
-    catch(e){
-
-
-        console.error(
-            e
-        );
-
-
-        status.innerHTML =
-        "❌ Bluetooth Error";
-
-
-    }
-
-
-}
-
-
-
-// =======================================
-// CHECK STATUS
-// =======================================
-
-function isPrinterConnected(){
-
-    return printerConnected;
-
-}
-
-
-
-// =======================================
-// SEND DATA PRINT
-// =======================================
-
-async function sendPrinter(data){
-
-
-    if(!printerConnected){
-
-
-        alert(
-            "Printer belum terhubung"
-        );
-
-
-        return false;
-
-    }
-
-
-
-    try{
-
-
-        await window.SmartPrint.print({
-
-            port:
-            printerPort,
-
-
-            buffer:
-            data
+            optionalServices:
+            TSPL_SERVICES
 
         });
 
 
 
-        console.log(
-            "PRINT SUCCESS"
+        printerDevice.addEventListener(
+            "gattserverdisconnected",
+            disconnectEvent
         );
+
+
+
+        status.innerHTML =
+        "🔄 Connecting...";
+
+
+
+        printerServer =
+        await printerDevice.gatt.connect();
+
+
+
+        const services =
+        await printerServer.getPrimaryServices();
+
+
+
+        for(
+            const service of services
+        ){
+
+
+            console.log(
+                "SERVICE:",
+                service.uuid
+            );
+
+
+            const chars =
+            await service.getCharacteristics();
+
+
+
+            for(
+                const char of chars
+            ){
+
+
+                console.log(
+                    "CHAR:",
+                    char.uuid,
+                    char.properties
+                );
+
+
+
+                if(
+                    char.properties.write ||
+                    char.properties.writeWithoutResponse
+                ){
+
+
+                    printerWrite = char;
+
+
+                    break;
+
+
+                }
+
+
+            }
+
+
+
+            if(printerWrite)
+                break;
+
+
+        }
+
+
+
+        if(!printerWrite){
+
+
+            throw new Error(
+                "TSPL Write Characteristic tidak ditemukan"
+            );
+
+
+        }
+
+
+
+        localStorage.setItem(
+            "TSPL_Printer",
+            printerDevice.name
+        );
+
+
+
+        status.innerHTML =
+        "🟢 TSPL Printer Connected";
+
+
+
+        console.log(
+            "CONNECTED:",
+            printerDevice.name
+        );
+
 
 
         return true;
@@ -222,25 +180,117 @@ async function sendPrinter(data){
 
     }
 
-    catch(e){
+
+    catch(error){
 
 
         console.error(
-            e
+            error
         );
 
 
-        alert(
-            "Print gagal : "
-            +
-            e.message
-        );
+        status.innerHTML =
+        "❌ Bluetooth Error";
 
 
         return false;
 
 
     }
+
+
+}
+
+
+
+// =======================================
+// SEND TSPL DATA
+// =======================================
+
+async function sendTSPL(command){
+
+
+
+    if(
+        !printerWrite
+    ){
+
+        throw new Error(
+            "Printer belum connect"
+        );
+
+    }
+
+
+
+    const encoder =
+    new TextEncoder();
+
+
+
+    const data =
+    encoder.encode(command);
+
+
+
+    const chunkSize =
+    180;
+
+
+
+    for(
+        let i=0;
+        i<data.length;
+        i+=chunkSize
+    ){
+
+
+        const chunk =
+        data.slice(
+            i,
+            i+chunkSize
+        );
+
+
+
+        if(
+            printerWrite.properties
+            .writeWithoutResponse
+        ){
+
+
+            await printerWrite
+            .writeValueWithoutResponse(
+                chunk
+            );
+
+
+        }
+        else{
+
+
+            await printerWrite
+            .writeValue(
+                chunk
+            );
+
+
+        }
+
+
+
+        await new Promise(
+            r=>setTimeout(r,20)
+        );
+
+
+    }
+
+
+
+    console.log(
+        "TSPL SENT"
+    );
 
 
 }
@@ -251,17 +301,25 @@ async function sendPrinter(data){
 // DISCONNECT
 // =======================================
 
-function disconnectPrinter(){
+function disconnectEvent(){
 
 
-    printerPort=null;
+    console.log(
+        "TSPL Printer Disconnect"
+    );
 
-    printerConnected=false;
+
+    printerWrite=null;
+    printerServer=null;
 
 
-    document.getElementById("status")
-    .innerHTML=
-    "⚪ Disconnect";
+    const status =
+    document.getElementById("status");
+
+
+    if(status)
+        status.innerHTML =
+        "🔴 Printer Disconnect";
 
 
 }
@@ -269,25 +327,42 @@ function disconnectPrinter(){
 
 
 // =======================================
-// COMPATIBILITY
+// TEST TSPL
 // =======================================
 
-function connectBT(){
+async function testTSPL(){
 
-    autoConnectPrinter();
+
+    const tspl = `
+
+SIZE 58 mm,40 mm
+
+GAP 3 mm,0
+
+CLS
+
+TEXT 50,50,"3",0,1,1,"SMARTPRINT"
+
+BARCODE 50,100,"128",80,1,0,2,2,"123456"
+
+PRINT 1
+
+`;
+
+
+    await sendTSPL(tspl);
+
 
 }
 
 
+window.connectPrinter =
+connectPrinter;
 
-// =======================================
-// START
-// =======================================
 
-window.addEventListener(
-"DOMContentLoaded",
-()=>{
+window.sendTSPL =
+sendTSPL;
 
-    initBluetooth();
 
-});
+window.testTSPL =
+testTSPL;
