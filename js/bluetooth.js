@@ -397,7 +397,17 @@ FEATURES
 
 
                 this.server =
-                    await this.device.gatt.connect();
+                  await device.gatt.connect();
+
+console.log("Printer Connected");
+
+localStorage.setItem(
+    "SmartPrint_LastPrinter",
+    JSON.stringify({
+        name: device.name,
+        id: device.id
+    })
+);
 
 
                 if (!this.server) {
