@@ -473,7 +473,7 @@ class SmartPrint {
     updatePrinterStatus(
         connected,
         name = ""
-    ) {
+    ) 
 
         const status =
             document.getElementById(
