@@ -453,20 +453,18 @@ class SmartPrint {
 
         }
 
-        catch (error) {
+       catch (error) {
 
-            console.error(
-                "Print Error",
-                error
-            );
+    console.error("====================");
+    console.error(error);
+    console.error(error.name);
+    console.error(error.message);
+    console.error(error.stack);
+    console.error("====================");
 
-            alert(
-                "Print gagal."
-            );
+    alert(error.message);
 
-        }
-
-    }
+}
 
     // ==========================================
     // UPDATE STATUS
