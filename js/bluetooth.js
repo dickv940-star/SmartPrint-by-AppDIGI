@@ -1092,7 +1092,19 @@ FEATURES
 
 
             }
+// Simpan printer terakhir
+localStorage.setItem(
+    "SmartPrint_LastPrinter",
+    JSON.stringify({
+        name: device.name,
+        id: device.id
+    })
+);
 
+console.log(
+    "Printer saved:",
+    device.name
+);
             catch (error) {
 
 
