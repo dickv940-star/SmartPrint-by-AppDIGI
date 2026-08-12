@@ -2,792 +2,298 @@
 
 /*
 =====================================================
- SmartPrint Bluetooth Engine v2.0
- TSPL / Bluetooth LE
+ SmartPrint TSPL Engine v1.0
 =====================================================
 
-Fungsi:
-- Connect printer
-- Auto reconnect
-- Reconnect setelah disconnect
-- Is connected
-- Disconnect
-- Write data
-- Cari service otomatis
-- Cari characteristic write otomatis
-- Chunking data
-- Simpan informasi printer
-- Kompatibel dengan PrinterManager
+Canvas
+  ↓
+Bitmap Converter
+  ↓
+TSPL Command
+  ↓
+Bluetooth.write()
+  ↓
+Bluetooth Printer
+
+Target:
+- TSPL label printer
+- Bluetooth BLE
+- DPI 203
+- Label mm
 =====================================================
 */
 
 (function () {
 
-    const Bluetooth = {
+    "use strict";
 
-        // =========================================
-        // CONFIG
-        // =========================================
 
-        services: [
+    const TSPL = {
 
-            "000018f0-0000-1000-8000-00805f9b34fb",
 
-            "0000ffe0-0000-1000-8000-00805f9b34fb",
+        // =================================================
+        // DEFAULT
+        // =================================================
 
-            "49535343-fe7d-4ae5-8fa9-9fafd205e455"
+        defaultDPI: 203,
 
-        ],
+        defaultLabelWidth: 100,
 
+        defaultLabelHeight: 150,
 
-        characteristics: [
+        defaultGap: 2,
 
-            "00002af1-0000-1000-8000-00805f9b34fb",
 
-            "0000ffe1-0000-1000-8000-00805f9b34fb",
+        // =================================================
+        // PRINT
+        // =================================================
 
-            "49535343-8841-43f4-a8d4-ecbe34729bb3"
+        async print(canvas, printer) {
 
-        ],
-
-
-        chunkSize: 180,
-
-        delay: 20,
-
-
-        // =========================================
-        // STATE
-        // =========================================
-
-        device: null,
-
-        server: null,
-
-        writeCharacteristic: null,
-
-        connected: false,
-
-        connecting: false,
-
-
-        // =========================================
-        // CONNECT
-        // =========================================
-
-        async connect() {
-
-            if (this.connecting) {
-
-                console.warn(
-                    "Bluetooth connection sedang berjalan."
-                );
-
-                return false;
-
-            }
-
-
-            this.connecting = true;
-
-            this.updateStatus(
-                "connecting"
-            );
-
-
-            try {
-
-                console.log(
-                    "----------------------------------------"
-                );
-
-                console.log(
-                    "SMARTPRINT BLUETOOTH CONNECT"
-                );
-
-                console.log(
-                    "----------------------------------------"
-                );
-
-
-                if (
-                    !navigator.bluetooth
-                ) {
-
-                    throw new Error(
-                        "Web Bluetooth tidak didukung browser ini."
-                    );
-
-                }
-
-
-                /*
-                =========================================
-                REQUEST DEVICE
-                =========================================
-                */
-
-                const device =
-                    await navigator.bluetooth.requestDevice({
-
-                        acceptAllDevices: true,
-
-                        optionalServices:
-                            this.services
-
-                    });
-
-
-                if (!device) {
-
-                    throw new Error(
-                        "Printer Bluetooth tidak dipilih."
-                    );
-
-                }
-
-
-                this.device =
-                    device;
-
-
-                this.attachDisconnectEvent();
-
-
-                /*
-                =========================================
-                CONNECT GATT
-                =========================================
-                */
-
-                await this.connectGATT();
-
-
-                /*
-                =========================================
-                SAVE DEVICE INFO
-                =========================================
-                */
-
-                this.saveDevice();
-
-
-                this.connected =
-                    true;
-
-
-                this.connecting =
-                    false;
-
-
-                this.updateStatus(
-                    "connected"
-                );
-
-
-                console.log(
-                    "Bluetooth Connected:",
-                    this.device.name
-                );
-
-
-                return true;
-
-            }
-
-            catch (error) {
-
-                console.error(
-                    "Bluetooth Connect Error:",
-                    error
-                );
-
-
-                this.connected =
-                    false;
-
-                this.connecting =
-                    false;
-
-
-                this.updateStatus(
-                    "error"
-                );
-
-
-                return false;
-
-            }
-
-        },
-
-
-        // =========================================
-        // AUTO CONNECT
-        // =========================================
-
-        async autoConnect() {
-
-            console.log(
-                "Bluetooth Auto Connect..."
-            );
-
-
-            if (
-                !navigator.bluetooth
-            ) {
-
-                console.warn(
-                    "Web Bluetooth tidak tersedia."
-                );
-
-                return false;
-
-            }
-
-
-            /*
-            =========================================
-            GET PREVIOUSLY AUTHORIZED DEVICES
-            =========================================
-
-            Tidak semua browser mendukung API ini.
-            */
-
-            if (
-                typeof navigator.bluetooth.getDevices
-                !== "function"
-            ) {
-
-                console.warn(
-                    "navigator.bluetooth.getDevices() tidak tersedia."
-                );
-
-                this.updateStatus(
-                    "disconnected"
-                );
-
-                return false;
-
-            }
-
-
-            try {
-
-                const devices =
-                    await navigator.bluetooth.getDevices();
-
-
-                if (
-                    !devices ||
-                    devices.length === 0
-                ) {
-
-                    console.log(
-                        "Tidak ada printer yang tersimpan."
-                    );
-
-                    this.updateStatus(
-                        "disconnected"
-                    );
-
-                    return false;
-
-                }
-
-
-                /*
-                =========================================
-                PILIH DEVICE TERAKHIR
-                =========================================
-                */
-
-                const savedName =
-                    localStorage.getItem(
-                        "SMARTPRINT_PRINTER_NAME"
-                    );
-
-
-                let device =
-                    null;
-
-
-                if (savedName) {
-
-                    device =
-                        devices.find(
-                            item =>
-                                item.name === savedName
-                        );
-
-                }
-
-
-                /*
-                Jika printer terakhir tidak ditemukan,
-                gunakan device pertama.
-                */
-
-                if (!device) {
-
-                    device =
-                        devices[0];
-
-                }
-
-
-                this.device =
-                    device;
-
-
-                this.attachDisconnectEvent();
-
-
-                /*
-                =========================================
-                CONNECT
-                =========================================
-                */
-
-                await this.connectGATT();
-
-
-                this.connected =
-                    true;
-
-
-                this.updateStatus(
-                    "connected"
-                );
-
-
-                console.log(
-                    "Auto Connected:",
-                    this.device.name
-                );
-
-
-                return true;
-
-            }
-
-            catch (error) {
-
-                console.warn(
-                    "Auto Connect gagal:",
-                    error
-                );
-
-
-                this.connected =
-                    false;
-
-
-                this.updateStatus(
-                    "disconnected"
-                );
-
-
-                return false;
-
-            }
-
-        },
-
-
-        // =========================================
-        // CONNECT GATT
-        // =========================================
-
-        async connectGATT() {
-
-            if (!this.device) {
+            if (!canvas) {
 
                 throw new Error(
-                    "Bluetooth device tidak tersedia."
+                    "Canvas tidak tersedia."
+                );
+
+            }
+
+
+            if (!printer) {
+
+                throw new Error(
+                    "Printer Manager tidak tersedia."
                 );
 
             }
 
 
             if (
-                this.device.gatt &&
-                this.device.gatt.connected
-            ) {
-
-                console.log(
-                    "GATT sudah connected."
-                );
-
-            }
-            else {
-
-                this.server =
-                    await this.device.gatt.connect();
-
-            }
-
-
-            if (!this.server) {
-
-                this.server =
-                    this.device.gatt;
-
-            }
-
-
-            /*
-            =========================================
-            GET SERVICES
-            =========================================
-            */
-
-            const services =
-                await this.server.getPrimaryServices();
-
-
-            this.writeCharacteristic =
-                null;
-
-
-            /*
-            =========================================
-            SEARCH WRITE CHARACTERISTIC
-            =========================================
-            */
-
-            for (
-                const service of services
-            ) {
-
-                console.log(
-                    "SERVICE:",
-                    service.uuid
-                );
-
-
-                let characteristics;
-
-
-                try {
-
-                    characteristics =
-                        await service.getCharacteristics();
-
-                }
-
-                catch (error) {
-
-                    console.warn(
-                        "Tidak dapat membaca characteristic:",
-                        service.uuid
-                    );
-
-                    continue;
-
-                }
-
-
-                for (
-                    const characteristic
-                    of characteristics
-                ) {
-
-                    console.log(
-                        "CHAR:",
-                        characteristic.uuid,
-                        characteristic.properties
-                    );
-
-
-                    const properties =
-                        characteristic.properties;
-
-
-                    if (
-                        properties.write ||
-                        properties.writeWithoutResponse
-                    ) {
-
-                        /*
-                        Jika UUID dikenal,
-                        prioritaskan characteristic tersebut.
-                        */
-
-                        if (
-                            this.characteristics.includes(
-                                characteristic.uuid
-                            )
-                        ) {
-
-                            this.writeCharacteristic =
-                                characteristic;
-
-                            break;
-
-                        }
-
-
-                        /*
-                        Jika belum ada,
-                        gunakan characteristic write pertama.
-                        */
-
-                        if (
-                            !this.writeCharacteristic
-                        ) {
-
-                            this.writeCharacteristic =
-                                characteristic;
-
-                        }
-
-                    }
-
-                }
-
-
-                if (
-                    this.writeCharacteristic
-                ) {
-
-                    break;
-
-                }
-
-            }
-
-
-            if (
-                !this.writeCharacteristic
+                typeof Bluetooth ===
+                "undefined"
             ) {
 
                 throw new Error(
-                    "Bluetooth Write Characteristic tidak ditemukan."
+                    "Bluetooth Engine tidak ditemukan."
+                );
+
+            }
+
+
+            if (
+                !Bluetooth.isConnected()
+            ) {
+
+                throw new Error(
+                    "Bluetooth Printer belum terhubung."
                 );
 
             }
 
 
             console.log(
-                "WRITE CHARACTERISTIC:",
-                this.writeCharacteristic.uuid
+                "========================================"
             );
 
-        },
-
-
-        // =========================================
-        // IS CONNECTED
-        // =========================================
-
-        isConnected() {
-
-            if (!this.device) {
-
-                return false;
-
-            }
-
-
-            if (
-                this.device.gatt &&
-                !this.device.gatt.connected
-            ) {
-
-                this.connected =
-                    false;
-
-                return false;
-
-            }
-
-
-            return (
-                this.connected === true &&
-                this.writeCharacteristic !== null
+            console.log(
+                "TSPL PRINT"
             );
 
-        },
+            console.log(
+                "========================================"
+            );
 
 
-        // =========================================
-        // GET DEVICE
-        // =========================================
+            // =============================================
+            // SETTINGS
+            // =============================================
 
-        getDevice() {
+            const dpi =
+                Number(
+                    printer.dpi
+                ) ||
+                this.defaultDPI;
 
-            return this.device;
 
-        },
+            /*
+            Printer.paperWidth / paperHeight
+            di PrinterManager adalah pixel/dot.
+
+            Jika tersedia Settings label mm,
+            kita gunakan labelWidth / labelHeight.
+            */
+
+            let labelWidthMM =
+                this.defaultLabelWidth;
 
 
-        // =========================================
-        // WRITE DATA
-        // =========================================
+            let labelHeightMM =
+                this.defaultLabelHeight;
 
-        async write(data) {
+
+            let gapMM =
+                this.defaultGap;
+
 
             if (
-                !this.isConnected()
+                typeof Settings !==
+                "undefined"
             ) {
-
-                throw new Error(
-                    "Printer Bluetooth belum terhubung."
-                );
-
-            }
-
-
-            if (
-                !this.writeCharacteristic
-            ) {
-
-                throw new Error(
-                    "Write characteristic tidak tersedia."
-                );
-
-            }
-
-
-            let bytes;
-
-
-            /*
-            =========================================
-            STRING
-            =========================================
-            */
-
-            if (
-                typeof data === "string"
-            ) {
-
-                const encoder =
-                    new TextEncoder();
-
-                bytes =
-                    encoder.encode(data);
-
-            }
-
-
-            /*
-            =========================================
-            UINT8ARRAY
-            =========================================
-            */
-
-            else if (
-                data instanceof Uint8Array
-            ) {
-
-                bytes =
-                    data;
-
-            }
-
-
-            /*
-            =========================================
-            ARRAYBUFFER
-            =========================================
-            */
-
-            else if (
-                data instanceof ArrayBuffer
-            ) {
-
-                bytes =
-                    new Uint8Array(data);
-
-            }
-
-
-            else {
-
-                throw new Error(
-                    "Format data Bluetooth tidak didukung."
-                );
-
-            }
-
-
-            /*
-            =========================================
-            CHUNK DATA
-            =========================================
-            */
-
-            for (
-                let i = 0;
-                i < bytes.length;
-                i += this.chunkSize
-            ) {
-
-                const chunk =
-                    bytes.slice(
-                        i,
-                        i + this.chunkSize
-                    );
-
-
-                /*
-                =========================================
-                WRITE WITHOUT RESPONSE
-                =========================================
-                */
 
                 if (
-                    this.writeCharacteristic
-                        .properties
-                        .writeWithoutResponse &&
-                    typeof this.writeCharacteristic
-                        .writeValueWithoutResponse
-                        === "function"
+                    Settings.labelWidth
                 ) {
 
-                    await this.writeCharacteristic
-                        .writeValueWithoutResponse(
-                            chunk
+                    labelWidthMM =
+                        Number(
+                            Settings.labelWidth
                         );
 
                 }
 
 
-                /*
-                =========================================
-                WRITE WITH RESPONSE
-                =========================================
-                */
+                if (
+                    Settings.labelHeight
+                ) {
 
-                else {
-
-                    await this.writeCharacteristic
-                        .writeValue(
-                            chunk
+                    labelHeightMM =
+                        Number(
+                            Settings.labelHeight
                         );
 
                 }
 
 
-                /*
-                =========================================
-                PRINTER DELAY
-                =========================================
-                */
+                if (
+                    Settings.gap !==
+                    undefined
+                ) {
 
-                await this.sleep(
-                    this.delay
+                    gapMM =
+                        Number(
+                            Settings.gap
+                        );
+
+                }
+
+            }
+
+
+            // =============================================
+            // MM → DOT
+            // =============================================
+
+            const widthDot =
+                this.mmToDot(
+                    labelWidthMM,
+                    dpi
+                );
+
+
+            const heightDot =
+                this.mmToDot(
+                    labelHeightMM,
+                    dpi
+                );
+
+
+            const gapDot =
+                this.mmToDot(
+                    gapMM,
+                    dpi
+                );
+
+
+            console.log(
+                "Label:",
+                labelWidthMM,
+                "x",
+                labelHeightMM,
+                "mm"
+            );
+
+
+            console.log(
+                "Dots:",
+                widthDot,
+                "x",
+                heightDot
+            );
+
+
+            // =============================================
+            // CONVERT CANVAS
+            // =============================================
+
+            const bitmap =
+                this.canvasToBitmap(
+                    canvas,
+                    widthDot,
+                    heightDot
+                );
+
+
+            // =============================================
+            // BUILD TSPL
+            // =============================================
+
+            const command =
+                this.buildCommand({
+
+                    widthMM:
+                        labelWidthMM,
+
+                    heightMM:
+                        labelHeightMM,
+
+                    gapMM:
+                        gapMM,
+
+                    widthDot:
+                        widthDot,
+
+                    heightDot:
+                        heightDot,
+
+                    gapDot:
+                        gapDot,
+
+                    bitmap:
+                        bitmap,
+
+                    printer:
+                        printer
+
+                });
+
+
+            console.log(
+                "TSPL command size:",
+                command.length
+            );
+
+
+            // =============================================
+            // SEND
+            // =============================================
+
+            const result =
+                await Bluetooth.write(
+                    command
+                );
+
+
+            if (!result) {
+
+                throw new Error(
+                    "TSPL data gagal dikirim."
                 );
 
             }
 
 
             console.log(
-                "Bluetooth DATA SENT:",
-                bytes.length,
-                "bytes"
+                "TSPL PRINT SENT"
             );
 
 
@@ -796,260 +302,552 @@ Fungsi:
         },
 
 
-        // =========================================
-        // DISCONNECT
-        // =========================================
+        // =================================================
+        // MM → DOT
+        // =================================================
 
-        disconnect() {
+        mmToDot(mm, dpi) {
 
-            console.log(
-                "Bluetooth Disconnect"
-            );
-
-
-            try {
-
-                if (
-                    this.device &&
-                    this.device.gatt &&
-                    this.device.gatt.connected
-                ) {
-
-                    this.device.gatt.disconnect();
-
-                }
-
-            }
-
-            catch (error) {
-
-                console.error(
-                    "Bluetooth Disconnect Error:",
-                    error
-                );
-
-            }
-
-
-            this.connected =
-                false;
-
-            this.server =
-                null;
-
-            this.writeCharacteristic =
-                null;
-
-
-            this.updateStatus(
-                "disconnected"
+            return Math.round(
+                Number(mm) *
+                Number(dpi) /
+                25.4
             );
 
         },
 
 
-        // =========================================
-        // DISCONNECT EVENT
-        // =========================================
+        // =================================================
+        // CANVAS → BITMAP
+        // =================================================
 
-        attachDisconnectEvent() {
+        canvasToBitmap(
+            canvas,
+            targetWidth,
+            targetHeight
+        ) {
 
-            if (!this.device) {
+            /*
+            =============================================
+            Temporary Canvas
+            =============================================
+            */
 
-                return;
+            const tempCanvas =
+                document.createElement(
+                    "canvas"
+                );
 
-            }
+
+            tempCanvas.width =
+                targetWidth;
+
+
+            tempCanvas.height =
+                targetHeight;
+
+
+            const ctx =
+                tempCanvas.getContext(
+                    "2d",
+                    {
+                        willReadFrequently: true
+                    }
+                );
 
 
             /*
-            Hindari listener ganda
+            =============================================
+            WHITE BACKGROUND
+            =============================================
             */
 
-            if (
-                this.device.__smartprintDisconnectAttached
+            ctx.fillStyle =
+                "#FFFFFF";
+
+
+            ctx.fillRect(
+                0,
+                0,
+                targetWidth,
+                targetHeight
+            );
+
+
+            /*
+            =============================================
+            DRAW SOURCE
+            =============================================
+            */
+
+            ctx.drawImage(
+
+                canvas,
+
+                0,
+                0,
+                canvas.width,
+                canvas.height,
+
+                0,
+                0,
+                targetWidth,
+                targetHeight
+
+            );
+
+
+            /*
+            =============================================
+            IMAGE DATA
+            =============================================
+            */
+
+            const imageData =
+                ctx.getImageData(
+                    0,
+                    0,
+                    targetWidth,
+                    targetHeight
+                );
+
+
+            const data =
+                imageData.data;
+
+
+            /*
+            =============================================
+            TSPL BITMAP
+
+            1 bit per pixel
+
+            Black = 1
+            White = 0
+            =============================================
+            */
+
+            const bytesPerRow =
+                Math.ceil(
+                    targetWidth / 8
+                );
+
+
+            const bitmap =
+                new Uint8Array(
+                    bytesPerRow *
+                    targetHeight
+                );
+
+
+            for (
+                let y = 0;
+                y < targetHeight;
+                y++
             ) {
 
-                return;
+                for (
+                    let x = 0;
+                    x < targetWidth;
+                    x++
+                ) {
+
+                    const index =
+                        (
+                            y *
+                            targetWidth +
+                            x
+                        ) * 4;
+
+
+                    const r =
+                        data[index];
+
+
+                    const g =
+                        data[index + 1];
+
+
+                    const b =
+                        data[index + 2];
+
+
+                    const a =
+                        data[index + 3];
+
+
+                    /*
+                    -------------------------------------
+                    Alpha
+                    -------------------------------------
+                    */
+
+                    if (a < 128) {
+
+                        continue;
+
+                    }
+
+
+                    /*
+                    -------------------------------------
+                    Grayscale
+                    -------------------------------------
+                    */
+
+                    const gray =
+                        (
+                            r * 299 +
+                            g * 587 +
+                            b * 114
+                        ) / 1000;
+
+
+                    /*
+                    -------------------------------------
+                    Threshold
+                    -------------------------------------
+                    */
+
+                    if (
+                        gray < 128
+                    ) {
+
+                        const byteIndex =
+                            y *
+                            bytesPerRow +
+                            Math.floor(
+                                x / 8
+                            );
+
+
+                        const bit =
+                            7 -
+                            (
+                                x % 8
+                            );
+
+
+                        bitmap[
+                            byteIndex
+                        ] |=
+                            (
+                                1 << bit
+                            );
+
+                    }
+
+                }
 
             }
 
 
-            this.device.addEventListener(
-                "gattserverdisconnected",
-                () => {
+            return {
 
-                    console.warn(
-                        "Printer Bluetooth disconnected."
-                    );
+                data:
+                    bitmap,
 
+                width:
+                    targetWidth,
 
-                    this.connected =
-                        false;
+                height:
+                    targetHeight,
 
-                    this.server =
-                        null;
+                bytesPerRow:
+                    bytesPerRow
 
-                    this.writeCharacteristic =
-                        null;
-
-
-                    this.updateStatus(
-                        "disconnected"
-                    );
-
-                }
-            );
-
-
-            this.device.__smartprintDisconnectAttached =
-                true;
+            };
 
         },
 
 
-        // =========================================
-        // SAVE DEVICE
-        // =========================================
+        // =================================================
+        // BUILD TSPL COMMAND
+        // =================================================
 
-        saveDevice() {
+        buildCommand(options) {
 
-            if (!this.device) {
+            const {
 
-                return;
+                widthMM,
+
+                heightMM,
+
+                gapMM,
+
+                widthDot,
+
+                heightDot,
+
+                bitmap,
+
+                printer
+
+            } = options;
+
+
+            let tspl = "";
+
+
+            // =============================================
+            // SIZE
+            // =============================================
+
+            tspl +=
+                `SIZE ${this.cleanNumber(widthMM)} mm,${this.cleanNumber(heightMM)} mm\n`;
+
+
+            // =============================================
+            // GAP
+            // =============================================
+
+            tspl +=
+                `GAP ${this.cleanNumber(gapMM)} mm,0\n`;
+
+
+            // =============================================
+            // SPEED
+            // =============================================
+
+            if (
+                printer &&
+                printer.speed
+            ) {
+
+                tspl +=
+                    `SPEED ${Number(printer.speed)}\n`;
 
             }
 
 
-            localStorage.setItem(
-                "SMARTPRINT_PRINTER_NAME",
-                this.device.name || ""
+            // =============================================
+            // DENSITY
+            // =============================================
+
+            if (
+                printer &&
+                printer.density !==
+                undefined
+            ) {
+
+                tspl +=
+                    `DENSITY ${Number(printer.density)}\n`;
+
+            }
+
+
+            // =============================================
+            // CLS
+            // =============================================
+
+            tspl +=
+                "CLS\n";
+
+
+            // =============================================
+            // BITMAP
+            // =============================================
+
+            tspl +=
+                `BITMAP 0,0,${bitmap.bytesPerRow},${heightDot},0,`;
+
+
+            /*
+            =============================================
+            BITMAP DATA
+
+            TSPL BITMAP expects binary data.
+
+            Header is ASCII.
+            Bitmap itself must be raw bytes.
+            =============================================
+            */
+
+            const header =
+                new TextEncoder().encode(
+                    tspl
+                );
+
+
+            const bitmapData =
+                bitmap.data;
+
+
+            // =============================================
+            // PRINT
+            // =============================================
+
+            const copies =
+                Math.max(
+                    1,
+                    Number(
+                        printer.copies
+                    ) || 1
+                );
+
+
+            const printCommand =
+                new TextEncoder().encode(
+                    `\nPRINT ${copies}\n`
+                );
+
+
+            /*
+            =============================================
+            COMBINE
+            =============================================
+            */
+
+            const result =
+                new Uint8Array(
+
+                    header.length +
+                    bitmapData.length +
+                    printCommand.length
+
+                );
+
+
+            result.set(
+                header,
+                0
             );
 
 
-            localStorage.setItem(
-                "SMARTPRINT_PRINTER_ID",
-                this.device.id || ""
+            result.set(
+                bitmapData,
+                header.length
+            );
+
+
+            result.set(
+                printCommand,
+
+                header.length +
+                bitmapData.length
+
+            );
+
+
+            return result;
+
+        },
+
+
+        // =================================================
+        // TEST PRINT
+        // =================================================
+
+        async testPrint() {
+
+            if (
+                typeof Bluetooth ===
+                "undefined"
+            ) {
+
+                throw new Error(
+                    "Bluetooth Engine tidak ditemukan."
+                );
+
+            }
+
+
+            if (
+                !Bluetooth.isConnected()
+            ) {
+
+                throw new Error(
+                    "Printer belum terhubung."
+                );
+
+            }
+
+
+            const command =
+
+                `SIZE 58 mm,40 mm
+GAP 3 mm,0
+CLS
+TEXT 50,50,"3",0,1,1,"SMARTPRINT"
+BARCODE 50,100,"128",80,1,0,2,2,"123456"
+PRINT 1
+`;
+
+
+            await Bluetooth.write(
+                command
             );
 
 
             console.log(
-                "Printer information saved."
+                "TSPL TEST PRINT SENT"
+            );
+
+
+            return true;
+
+        },
+
+
+        // =================================================
+        // RAW COMMAND
+        // =================================================
+
+        async sendRaw(command) {
+
+            if (
+                typeof Bluetooth ===
+                "undefined"
+            ) {
+
+                throw new Error(
+                    "Bluetooth Engine tidak ditemukan."
+                );
+
+            }
+
+
+            if (
+                !Bluetooth.isConnected()
+            ) {
+
+                throw new Error(
+                    "Printer belum terhubung."
+                );
+
+            }
+
+
+            return await Bluetooth.write(
+                command
             );
 
         },
 
 
-        // =========================================
-        // STATUS
-        // =========================================
+        // =================================================
+        // CLEAN NUMBER
+        // =================================================
 
-        updateStatus(state) {
+        cleanNumber(value) {
 
-            const status =
-                document.getElementById(
-                    "status"
-                );
+            const number =
+                Number(value);
 
 
-            const printerStatus =
-                document.getElementById(
-                    "printerStatus"
-                );
+            if (
+                !Number.isFinite(number)
+            ) {
 
-
-            const dot =
-                document.querySelector(
-                    ".dot"
-                );
-
-
-            let text =
-                "No Printer";
-
-
-            let connected =
-                false;
-
-
-            switch (state) {
-
-                case "connecting":
-
-                    text =
-                        "Connecting...";
-
-                    break;
-
-
-                case "connected":
-
-                    text =
-                        "Printer Connected";
-
-                    connected =
-                        true;
-
-                    break;
-
-
-                case "disconnected":
-
-                    text =
-                        "No Printer";
-
-                    break;
-
-
-                case "error":
-
-                    text =
-                        "Bluetooth Error";
-
-                    break;
+                return "0";
 
             }
 
 
-            if (status) {
-
-                status.textContent =
-                    text;
-
-            }
-
-
-            if (printerStatus) {
-
-                printerStatus.textContent =
-                    text;
-
-            }
-
-
-            if (dot) {
-
-                dot.classList.toggle(
-                    "connected",
-                    connected
-                );
-
-            }
-
-        },
-
-
-        // =========================================
-        // SLEEP
-        // =========================================
-
-        sleep(ms) {
-
-            return new Promise(
-                resolve =>
-                    setTimeout(
-                        resolve,
-                        ms
-                    )
+            return String(
+                Number(
+                    number.toFixed(2)
+                )
             );
 
         }
@@ -1057,69 +855,29 @@ Fungsi:
     };
 
 
-    /*
-    =========================================
-    GLOBAL
-    =========================================
-    */
+    // =====================================================
+    // GLOBAL
+    // =====================================================
 
-    window.Bluetooth =
-        Bluetooth;
+    window.TSPL =
+        TSPL;
 
 
-    /*
-    =========================================
-    LEGACY COMPATIBILITY
-    =========================================
-    */
+    // =====================================================
+    // LEGACY
+    // =====================================================
 
-    window.connectPrinter =
-        () => Bluetooth.connect();
+    window.testTSPL =
+        function () {
 
+            return TSPL.testPrint();
 
-    window.sendTSPL =
-        command =>
-            Bluetooth.write(command);
+        };
 
 
-    window.disconnectPrinter =
-        () =>
-            Bluetooth.disconnect();
-
-
-    /*
-    =========================================
-    AUTO CONNECT
-    =========================================
-
-    Kita tidak langsung menjalankan autoConnect
-    sebelum halaman selesai.
-    */
-
-    document.addEventListener(
-        "DOMContentLoaded",
-        async () => {
-
-            console.log(
-                "SmartPrint Bluetooth Engine v2.0 Ready"
-            );
-
-
-            /*
-            Tunggu sebentar supaya
-            PrinterManager dan UI selesai load.
-            */
-
-            setTimeout(
-                async () => {
-
-                    await Bluetooth.autoConnect();
-
-                },
-                500
-            );
-
-        }
+    console.log(
+        "SmartPrint TSPL Engine v1.0 Ready"
     );
+
 
 })();
