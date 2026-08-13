@@ -233,103 +233,101 @@
                 */
 
                 if (
-                    this.mode === "auto"
-                ) {
+    this.mode === "auto"
+) {
 
-                    // =====================================
-                    // TRY BRIDGE
-                    // =====================================
+    // =====================================
+    // 1. TRY BLE
+    // =====================================
 
-                    if (
-                        this.isBridgeSupported()
-                    ) {
+    if (
+        this.isBluetoothSupported()
+    ) {
 
-                        console.log(
-                            "Trying SmartPrint Local Bridge..."
-                        );
+        console.log(
+            "Trying Web Bluetooth BLE..."
+        );
 
+        const bleResult =
+            await this.connectBLE();
 
-                        const bridgeResult =
-                            await this.connectBridge(
-                                true
-                            );
+        if (bleResult) {
 
+            this.connecting =
+                false;
 
-                        if (bridgeResult) {
+            return true;
 
-                            this.connecting =
-                                false;
+        }
 
-                            return true;
-
-                        }
-
-                    }
+    }
 
 
-                    // =====================================
-                    // TRY BLE
-                    // =====================================
+    // =====================================
+    // 2. TRY SERIAL / COM
+    // =====================================
+    /*
+     * PENTING:
+     *
+     * connectSerial() hanya boleh dipanggil
+     * dari klik tombol Connect.
+     *
+     * Jangan panggil Serial otomatis dari
+     * autoConnect().
+     */
 
-                    if (
-                        this.isBluetoothSupported()
-                    ) {
+    if (
+        this.isSerialSupported()
+    ) {
 
-                        console.log(
-                            "Trying Web Bluetooth BLE..."
-                        );
+        console.log(
+            "Web Serial tersedia."
+        );
 
+        console.log(
+            "Serial menunggu user gesture."
+        );
 
-                        const bleResult =
-                            await this.connectBLE();
-
-
-                        if (bleResult) {
-
-                            this.connecting =
-                                false;
-
-                            return true;
-
-                        }
-
-                    }
-
-
-                    // =====================================
-                    // TRY SERIAL
-                    // =====================================
-
-                    if (
-                        this.isSerialSupported()
-                    ) {
-
-                        console.log(
-                            "Trying Web Serial / COM..."
-                        );
+    }
 
 
-                        const serialResult =
-                            await this.connectSerial();
+    // =====================================
+    // 3. TRY BRIDGE
+    // =====================================
+
+    if (
+        this.isBridgeSupported()
+    ) {
+
+        console.log(
+            "Trying SmartPrint Local Bridge..."
+        );
+
+        const bridgeResult =
+            await this.connectBridge(true);
+
+        if (bridgeResult) {
+
+            this.connecting =
+                false;
+
+            return true;
+
+        }
+
+    }
 
 
-                        if (serialResult) {
+    this.connecting =
+        false;
 
-                            this.connecting =
-                                false;
+    this.updateStatus(
+        "disconnected"
+    );
 
-                            return true;
+    return false;
 
-                        }
-
-                    }
-
-
-                    throw new Error(
-                        "Tidak ada metode koneksi printer yang berhasil."
-                    );
-
-                }
+}
 
 
                 // =================================================
