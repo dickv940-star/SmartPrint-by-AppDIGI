@@ -2,25 +2,26 @@
 
 /*
 =====================================================
- SmartPrint TSPL Engine v5.0
+ SmartPrint TSPL Engine v5.1
 =====================================================
 
  FOCUS
  ----------------------------------------------------
  ✓ TSPL native
- ✓ Bluetooth v5.0
- ✓ PrinterManager v4.0
+ ✓ Bluetooth v5.3 compatible
+ ✓ PrinterManager v4.x compatible
  ✓ 203 DPI
+ ✓ WHITE background
+ ✓ BLACK text / barcode / QR
+ ✓ Transparent pixel → WHITE
  ✓ Canvas → 1 bit bitmap
- ✓ Threshold
- ✓ Contrast
- ✓ Optional dithering
+ ✓ Correct MSB packing
+ ✓ No inverted bitmap
+ ✓ No black background
  ✓ Sharp text
  ✓ Sharp barcode
  ✓ Sharp QR
- ✓ Tidak membuat seluruh gambar menjadi grayscale
- ✓ Bitmap packing MSB
- ✓ Chunk dikirim melalui Bluetooth.write()
+ ✓ Optional dithering
  ✓ Copies
  ✓ Density
  ✓ Speed
@@ -31,25 +32,61 @@
 
 (function () {
 
+    "use strict";
+
+
     const TSPL = {
 
-        version: "5.0.0",
+        version: "5.1.0",
+
 
         // =================================================
-        // DEFAULT
+        // DEFAULT QUALITY
         // =================================================
 
         dpi: 203,
 
-        threshold: 180,
+        /*
+         * 0   = sangat hitam
+         * 255 = putih
+         *
+         * Nilai 200 cukup aman untuk:
+         * - text
+         * - barcode
+         * - QR
+         * - garis
+         */
 
-        contrast: 1.15,
+        threshold: 200,
+
+        /*
+         * Jangan terlalu tinggi.
+         * Kontras berlebihan dapat membuat
+         * background ikut menjadi hitam.
+         */
+
+        contrast: 1.0,
 
         brightness: 0,
 
+        /*
+         * Default OFF.
+         * Dithering dapat membuat barcode/text
+         * menjadi kurang bersih.
+         */
+
         dither: false,
 
+        /*
+         * WAJIB false untuk normal printing.
+         */
+
         invert: false,
+
+
+        // =================================================
+        // TSPL POSITION
+        // =================================================
 
         x: 0,
 
@@ -58,6 +95,11 @@
         gap: 2,
 
         direction: 1,
+
+
+        // =================================================
+        // PRINTER DEFAULT
+        // =================================================
 
         density: 6,
 
@@ -93,6 +135,27 @@
             }
 
 
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "SMARTPRINT TSPL ENGINE v5.1"
+            );
+
+            console.log(
+                "WHITE BACKGROUND / BLACK CONTENT"
+            );
+
+            console.log(
+                "========================================"
+            );
+
+
+            // =================================================
+            // CHECK CONNECTION
+            // =================================================
+
             if (
                 typeof printer.isConnected ===
                 "function"
@@ -109,19 +172,6 @@
             }
 
 
-            console.log(
-                "========================================"
-            );
-
-            console.log(
-                "SMARTPRINT TSPL ENGINE v5.0"
-            );
-
-            console.log(
-                "========================================"
-            );
-
-
             // =================================================
             // PRINTER SETTINGS
             // =================================================
@@ -132,13 +182,21 @@
 
 
             const density =
-                Number(printer.density) ||
-                this.density;
+                Number(printer.density);
+
+            const finalDensity =
+                Number.isFinite(density)
+                    ? density
+                    : this.density;
 
 
             const speed =
-                Number(printer.speed) ||
-                this.speed;
+                Number(printer.speed);
+
+            const finalSpeed =
+                Number.isFinite(speed)
+                    ? speed
+                    : this.speed;
 
 
             const copies =
@@ -165,12 +223,12 @@
 
             console.log(
                 "Density:",
-                density
+                finalDensity
             );
 
             console.log(
                 "Speed:",
-                speed
+                finalSpeed
             );
 
             console.log(
@@ -180,7 +238,7 @@
 
 
             // =================================================
-            // RESIZE CANVAS KE DOT PRINTER
+            // DIMENSION
             // =================================================
 
             const widthDots =
@@ -200,7 +258,7 @@
 
 
             console.log(
-                "Canvas:",
+                "Source Canvas:",
                 canvas.width,
                 "x",
                 canvas.height
@@ -208,7 +266,7 @@
 
 
             console.log(
-                "Print:",
+                "Print Size:",
                 widthDots,
                 "x",
                 heightDots,
@@ -217,7 +275,7 @@
 
 
             // =================================================
-            // RASTERIZE
+            // RASTER
             // =================================================
 
             const bitmap =
@@ -226,6 +284,7 @@
                     widthDots,
                     heightDots,
                     {
+
                         threshold:
                             this.threshold,
 
@@ -239,7 +298,8 @@
                             this.dither,
 
                         invert:
-                            this.invert
+                            false
+
                     }
                 );
 
@@ -253,13 +313,20 @@
 
 
             console.log(
-                "Bitmap Bytes:",
-                bitmap.data.length
+                "Bitmap Width Bytes:",
+                bitmap.widthBytes
+            );
+
+
+            console.log(
+                "Bitmap Data:",
+                bitmap.data.length,
+                "bytes"
             );
 
 
             // =================================================
-            // TSPL COMMAND
+            // TSPL HEADER
             // =================================================
 
             let command = "";
@@ -293,13 +360,13 @@
 
             command +=
                 "DENSITY " +
-                density +
+                finalDensity +
                 "\r\n";
 
 
             command +=
                 "SPEED " +
-                speed +
+                finalSpeed +
                 "\r\n";
 
 
@@ -308,7 +375,7 @@
 
 
             // =================================================
-            // BITMAP HEADER
+            // BITMAP
             // =================================================
 
             command +=
@@ -323,14 +390,18 @@
                 ",0,";
 
 
+            const encoder =
+                new TextEncoder();
+
+
             const header =
-                new TextEncoder().encode(
+                encoder.encode(
                     command
                 );
 
 
             const footer =
-                new TextEncoder().encode(
+                encoder.encode(
                     "\r\nPRINT " +
                     copies +
                     ",1\r\n"
@@ -338,14 +409,16 @@
 
 
             // =================================================
-            // GABUNG DATA
+            // OUTPUT
             // =================================================
 
             const output =
                 new Uint8Array(
+
                     header.length +
                     bitmap.data.length +
                     footer.length
+
                 );
 
 
@@ -376,7 +449,7 @@
 
 
             // =================================================
-            // SEND
+            // BLUETOOTH
             // =================================================
 
             if (
@@ -390,9 +463,11 @@
                     output
                 );
 
+
                 console.log(
                     "TSPL → Bluetooth.write()"
                 );
+
 
                 return true;
 
@@ -400,7 +475,7 @@
 
 
             // =================================================
-            // FALLBACK
+            // PRINTER FALLBACK
             // =================================================
 
             if (
@@ -412,20 +487,26 @@
                     output
                 );
 
+
+                console.log(
+                    "TSPL → Printer.write()"
+                );
+
+
                 return true;
 
             }
 
 
             throw new Error(
-                "TSPL: Tidak ada Bluetooth.write() atau Printer.write()."
+                "TSPL: Bluetooth.write() / Printer.write() tidak tersedia."
             );
 
         },
 
 
         // =================================================
-        // CANVAS → BITMAP
+        // CANVAS → 1 BIT BITMAP
         // =================================================
 
         canvasToBitmap(
@@ -436,28 +517,45 @@
         ) {
 
             const threshold =
-                options.threshold ??
-                this.threshold;
+                Number(
+                    options.threshold ??
+                    this.threshold
+                );
 
 
             const contrast =
-                options.contrast ??
-                this.contrast;
+                Number(
+                    options.contrast ??
+                    this.contrast
+                );
 
 
             const brightness =
-                options.brightness ??
-                this.brightness;
+                Number(
+                    options.brightness ??
+                    this.brightness
+                );
 
 
             const dither =
-                options.dither ??
-                false;
+                Boolean(
+                    options.dither ??
+                    false
+                );
 
+
+            /*
+             * Untuk keamanan printing:
+             *
+             * invert TIDAK boleh aktif
+             * kecuali memang sengaja dipilih.
+             */
 
             const invert =
-                options.invert ??
-                false;
+                Boolean(
+                    options.invert ??
+                    false
+                );
 
 
             // =================================================
@@ -488,10 +586,20 @@
                 );
 
 
+            if (!ctx) {
+
+                throw new Error(
+                    "TSPL: Canvas 2D context tidak tersedia."
+                );
+
+            }
+
+
             /*
-            Jangan gunakan smoothing.
-            Ini penting untuk ketajaman.
-            */
+             * Scaling dilakukan dengan smoothing.
+             *
+             * Ini lebih baik untuk image.
+             */
 
             ctx.imageSmoothingEnabled =
                 true;
@@ -502,8 +610,19 @@
 
 
             // =================================================
-            // WHITE BACKGROUND
+            // FORCE WHITE BACKGROUND
             // =================================================
+
+            ctx.save();
+
+
+            ctx.globalCompositeOperation =
+                "source-over";
+
+
+            ctx.globalAlpha =
+                1;
+
 
             ctx.fillStyle =
                 "#FFFFFF";
@@ -530,8 +649,11 @@
             );
 
 
+            ctx.restore();
+
+
             // =================================================
-            // IMAGE DATA
+            // READ PIXELS
             // =================================================
 
             const imageData =
@@ -543,16 +665,24 @@
                 );
 
 
-            // =================================================
-            // GRAYSCALE
-            // =================================================
+            const pixels =
+                imageData.data;
+
+
+            const totalPixels =
+                targetWidth *
+                targetHeight;
+
 
             const gray =
                 new Float32Array(
-                    targetWidth *
-                    targetHeight
+                    totalPixels
                 );
 
+
+            // =================================================
+            // GRAYSCALE
+            // =================================================
 
             for (
                 let y = 0;
@@ -566,31 +696,88 @@
                     x++
                 ) {
 
-                    const p =
+                    const pixelIndex =
                         (
                             y *
                             targetWidth +
                             x
-                        ) * 4;
+                        );
+
+
+                    const p =
+                        pixelIndex * 4;
 
 
                     const r =
-                        imageData.data[p];
+                        pixels[p];
 
 
                     const g =
-                        imageData.data[p + 1];
+                        pixels[p + 1];
 
 
                     const b =
-                        imageData.data[p + 2];
+                        pixels[p + 2];
+
+
+                    const a =
+                        pixels[p + 3];
+
+
+                    /*
+                     * PENTING
+                     *
+                     * Alpha transparan dianggap
+                     * WHITE, bukan black.
+                     *
+                     * Ini mencegah background hitam.
+                     */
+
+                    if (a < 16) {
+
+                        gray[pixelIndex] =
+                            255;
+
+                        continue;
+
+                    }
+
+
+                    /*
+                     * Composite alpha terhadap
+                     * background putih.
+                     *
+                     * Rumus:
+                     *
+                     * final =
+                     * pixel * alpha +
+                     * white * (1-alpha)
+                     */
+
+                    const alpha =
+                        a / 255;
+
+
+                    const rr =
+                        r * alpha +
+                        255 * (1 - alpha);
+
+
+                    const gg =
+                        g * alpha +
+                        255 * (1 - alpha);
+
+
+                    const bb =
+                        b * alpha +
+                        255 * (1 - alpha);
 
 
                     let value =
                         (
-                            0.299 * r +
-                            0.587 * g +
-                            0.114 * b
+                            0.299 * rr +
+                            0.587 * gg +
+                            0.114 * bb
                         );
 
 
@@ -598,12 +785,21 @@
                     // CONTRAST
                     // =================================================
 
-                    value =
-                        (
-                            value - 128
-                        ) *
-                        contrast +
-                        128;
+                    if (
+                        Number.isFinite(
+                            contrast
+                        ) &&
+                        contrast !== 1
+                    ) {
+
+                        value =
+                            (
+                                value - 128
+                            ) *
+                            contrast +
+                            128;
+
+                    }
 
 
                     // =================================================
@@ -613,6 +809,10 @@
                     value +=
                         brightness;
 
+
+                    // =================================================
+                    // CLAMP
+                    // =================================================
 
                     value =
                         Math.max(
@@ -624,11 +824,7 @@
                         );
 
 
-                    gray[
-                        y *
-                        targetWidth +
-                        x
-                    ] =
+                    gray[pixelIndex] =
                         value;
 
                 }
@@ -653,7 +849,7 @@
 
 
             // =================================================
-            // BIT PACK
+            // WIDTH → BYTE
             // =================================================
 
             const widthBytes =
@@ -669,6 +865,10 @@
                 );
 
 
+            // =================================================
+            // PACK MSB
+            // =================================================
+
             for (
                 let y = 0;
                 y < targetHeight;
@@ -681,7 +881,7 @@
                     byteX++
                 ) {
 
-                    let value =
+                    let packed =
                         0;
 
 
@@ -695,6 +895,11 @@
                             byteX * 8 +
                             bit;
 
+
+                        /*
+                         * Padding sebelah kanan
+                         * HARUS PUTIH.
+                         */
 
                         if (
                             x >=
@@ -732,6 +937,13 @@
                         }
 
 
+                        /*
+                         * Normal:
+                         *
+                         * black = 1
+                         * white = 0
+                         */
+
                         if (invert) {
 
                             black =
@@ -742,7 +954,7 @@
 
                         if (black) {
 
-                            value |=
+                            packed |=
                                 (
                                     0x80 >>
                                     bit
@@ -758,9 +970,71 @@
                         widthBytes +
                         byteX
                     ] =
-                        value;
+                        packed;
 
                 }
+
+            }
+
+
+            // =================================================
+            // DEBUG
+            // =================================================
+
+            let blackCount = 0;
+
+
+            for (
+                let i = 0;
+                i < bytes.length;
+                i++
+            ) {
+
+                let byte =
+                    bytes[i];
+
+
+                while (byte) {
+
+                    blackCount +=
+                        byte & 1;
+
+
+                    byte >>=
+                        1;
+
+                }
+
+            }
+
+
+            const blackRatio =
+                (
+                    blackCount /
+                    totalPixels
+                ) * 100;
+
+
+            console.log(
+                "TSPL Black Pixel Ratio:",
+                blackRatio.toFixed(2) + "%"
+            );
+
+
+            /*
+             * Jika hampir seluruh bitmap hitam,
+             * kemungkinan ada masalah pada source
+             * atau threshold.
+             */
+
+            if (
+                blackRatio >
+                90
+            ) {
+
+                console.warn(
+                    "TSPL WARNING: bitmap >90% hitam."
+                );
 
             }
 
@@ -904,7 +1178,7 @@
 
 
         // =================================================
-        // DIMENSION
+        // NORMALIZE DIMENSION
         // =================================================
 
         normalizeDimension(
@@ -912,17 +1186,6 @@
             fallback,
             dpi
         ) {
-
-            /*
-            PrinterManager lama menggunakan
-            paperWidth dalam DOT.
-
-            Jika nilainya besar seperti 576,
-            640, 1200 → anggap DOT.
-
-            Jika nilainya kecil seperti 80,
-            100, 150 → anggap MILLIMETER.
-            */
 
             const n =
                 Number(value);
@@ -938,16 +1201,36 @@
             }
 
 
+            /*
+             * <=300 dianggap MM
+             *
+             * Contoh:
+             *
+             * 100 mm
+             * 150 mm
+             *
+             * menjadi:
+             *
+             * 799 dots
+             * 1199 dots
+             */
+
             if (n <= 300) {
 
                 return Math.round(
-                    n /
-                    25.4 *
+                    (
+                        n /
+                        25.4
+                    ) *
                     dpi
                 );
 
             }
 
+
+            /*
+             * Nilai besar dianggap DOT.
+             */
 
             return Math.round(n);
 
@@ -973,7 +1256,7 @@
 
 
         // =================================================
-        // SET QUALITY
+        // QUALITY
         // =================================================
 
         setQuality(options = {}) {
@@ -984,8 +1267,14 @@
             ) {
 
                 this.threshold =
-                    Number(
-                        options.threshold
+                    Math.max(
+                        0,
+                        Math.min(
+                            255,
+                            Number(
+                                options.threshold
+                            )
+                        )
                     );
 
             }
@@ -997,8 +1286,14 @@
             ) {
 
                 this.contrast =
-                    Number(
-                        options.contrast
+                    Math.max(
+                        0.1,
+                        Math.min(
+                            3,
+                            Number(
+                                options.contrast
+                            )
+                        )
                     );
 
             }
@@ -1010,8 +1305,14 @@
             ) {
 
                 this.brightness =
-                    Number(
-                        options.brightness
+                    Math.max(
+                        -255,
+                        Math.min(
+                            255,
+                            Number(
+                                options.brightness
+                            )
+                        )
                     );
 
             }
@@ -1030,6 +1331,11 @@
             }
 
 
+            /*
+             * Jangan invert kecuali
+             * benar-benar diminta.
+             */
+
             if (
                 options.invert !==
                 undefined
@@ -1042,11 +1348,17 @@
 
             }
 
+
+            console.log(
+                "TSPL Quality Updated:",
+                this.getSettings()
+            );
+
         },
 
 
         // =================================================
-        // TEST SETTINGS
+        // SETTINGS
         // =================================================
 
         getSettings() {
@@ -1102,7 +1414,12 @@
 
 
     console.log(
-        "SmartPrint TSPL Engine v5.0 Ready"
+        "SmartPrint TSPL Engine v5.1 Ready"
     );
+
+    console.log(
+        "TSPL → WHITE BACKGROUND / BLACK CONTENT"
+    );
+
 
 })();
