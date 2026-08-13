@@ -1,5 +1,8 @@
+"use strict";
+
+/*
 =====================================================
- SmartPrint TSPL Engine v5.2
+ SmartPrint TSPL Engine v5.3
 =====================================================
 
  TARGET
@@ -13,7 +16,8 @@
  ----------------------------------------------------
  TSPL BITMAP
  Bitmap mode : 0
- Bitmap      : MSB first
+ Bitmap      : RAW Uint8Array
+ Bit order   : MSB FIRST
  PRINT       : PRINT copies,1
 
  COLOR
@@ -30,44 +34,98 @@
  - Tidak mengubah canvas asli
  - Tidak mengubah preview
  - Tidak mengubah warna canvas
- - Canvas hanya dibaca untuk proses print
+ - Canvas hanya dibaca
  - Transparansi dianggap putih
- - Anti-black-block protection
- - Width padding dianggap putih
- - Kompatibel Bluetooth Engine
- - Kompatibel Printer Manager
+ - Padding dianggap putih
+ - Tidak invert
+ - Tidak HEX encode bitmap
+ - Bitmap dikirim sebagai RAW bytes
+ - Anti black-block protection
+ - Kompatibel Printer Manager v4.1
+ - Kompatibel Bluetooth Engine v5.4
 =====================================================
 */
 
 
-const TSPL = (() => {
+/*
+=====================================================
+ GLOBAL NAMESPACE
+=====================================================
 
-    const VERSION = "5.2";
+ IMPORTANT:
+ Jangan gunakan:
+
+ const TSPL = ...
+
+ Karena file ini mungkin dimuat setelah engine
+ lain yang sudah membuat TSPL.
+
+ Kita gunakan satu global namespace.
+=====================================================
+*/
+
+(function (global) {
 
     /*
     =================================================
-     DEFAULT CONFIG
+    VERSION
     =================================================
     */
 
-    const DEFAULTS = {
+    const VERSION = "5.3";
+
+
+    /*
+    =================================================
+    CONSTANTS
+    =================================================
+    */
+
+    const TARGET = {
 
         widthMM: 100,
+
         heightMM: 150,
 
         dpi: 203,
 
         widthDots: 799,
+
         heightDots: 1199,
+
+        bytesPerRow: 100
+
+    };
+
+
+    /*
+    =================================================
+    DEFAULT CONFIG
+    =================================================
+    */
+
+    const DEFAULTS = {
+
+        widthMM: TARGET.widthMM,
+
+        heightMM: TARGET.heightMM,
+
+        dpi: TARGET.dpi,
+
+        widthDots: TARGET.widthDots,
+
+        heightDots: TARGET.heightDots,
 
         gap: 2,
 
         density: 8,
+
         speed: 4,
 
         copies: 1,
 
         x: 0,
+
         y: 0,
 
         bitmapMode: 0,
@@ -83,18 +141,30 @@ const TSPL = (() => {
 
     /*
     =================================================
-     INTERNAL HELPERS
+    NUMBER
     =================================================
     */
 
-    function number(value, fallback = 0) {
+    function number(value, fallback) {
 
         const n = Number(value);
 
-        return Number.isFinite(n) ? n : fallback;
+        if (Number.isFinite(n)) {
+
+            return n;
+
+        }
+
+        return fallback;
 
     }
 
+
+    /*
+    =================================================
+    CLAMP
+    =================================================
+    */
 
     function clamp(value, min, max) {
 
@@ -106,45 +176,79 @@ const TSPL = (() => {
     }
 
 
+    /*
+    =================================================
+    MM -> DOTS
+    =================================================
+    */
+
     function mmToDots(mm, dpi) {
 
         return Math.round(
-            number(mm) * number(dpi) / 25.4
+            number(mm, 0) *
+            number(dpi, TARGET.dpi) /
+            25.4
         );
 
     }
 
 
+    /*
+    =================================================
+    SETTINGS
+    =================================================
+    */
+
     function getSettings() {
+
+        /*
+         * SmartPrint Settings object.
+         */
 
         try {
 
             if (
-                typeof Settings !== "undefined" &&
-                Settings
+                typeof global.Settings !== "undefined" &&
+                global.Settings
             ) {
 
-                return Settings;
+                return global.Settings;
 
             }
 
-        } catch (e) {}
+        } catch (error) {}
 
+
+        /*
+         * LocalStorage fallback.
+         */
 
         try {
 
             const raw =
-                localStorage.getItem(
+                global.localStorage.getItem(
                     "SMARTPRINT_SETTINGS"
                 );
 
+
             if (raw) {
 
-                return JSON.parse(raw);
+                const parsed =
+                    JSON.parse(raw);
+
+
+                if (
+                    parsed &&
+                    typeof parsed === "object"
+                ) {
+
+                    return parsed;
+
+                }
 
             }
 
-        } catch (e) {}
+        } catch (error) {}
 
 
         return {};
@@ -154,178 +258,246 @@ const TSPL = (() => {
 
     /*
     =================================================
-     PRINTER SETTINGS
+    PRINTER CONFIG
     =================================================
     */
 
     function getPrinterConfig(options = {}) {
 
-        const settings = getSettings();
+        const settings =
+            getSettings();
+
 
         const printer =
             settings.printer ||
             settings.Printer ||
             settings;
 
+
         const label =
             settings.label ||
             settings.Label ||
             settings;
 
+
+        /*
+        ------------------------------------------------
+        DPI
+        ------------------------------------------------
+        */
+
         const dpi =
+            TARGET.dpi;
+
+
+        /*
+        ------------------------------------------------
+        LABEL SIZE
+        ------------------------------------------------
+
+        Untuk printer target ini kita pertahankan:
+
+        100 x 150 mm
+        203 DPI
+        799 x 1199 dots
+
+        Jangan mengambil paperWidth 80 dari printer
+        karena itu dapat menyebabkan raster 80 mm.
+        ------------------------------------------------
+        */
+
+        const widthMM =
             number(
-                options.dpi ??
-                printer.dpi ??
-                settings.dpi,
-                DEFAULTS.dpi
+                options.widthMM,
+                TARGET.widthMM
+            );
+
+
+        const heightMM =
+            number(
+                options.heightMM,
+                TARGET.heightMM
             );
 
 
         /*
-         * User target:
-         *
-         * 100mm x 150mm
-         * 203 DPI
-         *
-         * 100 / 25.4 * 203
-         * = 799.21
-         *
-         * 150 / 25.4 * 203
-         * = 1198.82
-         *
-         * Rounded:
-         * 799 x 1199
-         */
+        ------------------------------------------------
+        DOT SIZE
+        ------------------------------------------------
+        */
 
         const widthDots =
             number(
                 options.widthDots,
-                mmToDots(
-                    number(
-                        options.widthMM ??
-                        label.labelWidth ??
-                        printer.paperWidth ??
-                        DEFAULTS.widthMM
-                    ),
-                    dpi
-                )
+                TARGET.widthDots
             );
 
 
         const heightDots =
             number(
                 options.heightDots,
-                mmToDots(
+                TARGET.heightDots
+            );
+
+
+        /*
+        ------------------------------------------------
+        GAP
+        ------------------------------------------------
+        */
+
+        const gap =
+            number(
+                options.gap ??
+                label.gap ??
+                printer.gap,
+                DEFAULTS.gap
+            );
+
+
+        /*
+        ------------------------------------------------
+        DENSITY
+        ------------------------------------------------
+        */
+
+        const density =
+            clamp(
+                number(
+                    options.density ??
+                    printer.density ??
+                    settings.density,
+                    DEFAULTS.density
+                ),
+                0,
+                15
+            );
+
+
+        /*
+        ------------------------------------------------
+        SPEED
+        ------------------------------------------------
+        */
+
+        const speed =
+            clamp(
+                number(
+                    options.speed ??
+                    printer.speed ??
+                    settings.speed,
+                    DEFAULTS.speed
+                ),
+                1,
+                12
+            );
+
+
+        /*
+        ------------------------------------------------
+        COPIES
+        ------------------------------------------------
+        */
+
+        const copies =
+            Math.max(
+                1,
+                Math.floor(
                     number(
-                        options.heightMM ??
-                        label.labelHeight ??
-                        printer.paperHeight ??
-                        DEFAULTS.heightMM
-                    ),
-                    dpi
+                        options.copies ??
+                        printer.copies ??
+                        settings.copies,
+                        DEFAULTS.copies
+                    )
                 )
             );
 
 
-        const config = {
+        /*
+        ------------------------------------------------
+        THRESHOLD
+        ------------------------------------------------
+        */
 
-            widthMM:
+        const threshold =
+            clamp(
                 number(
-                    options.widthMM ??
-                    label.labelWidth,
-                    DEFAULTS.widthMM
+                    options.threshold,
+                    DEFAULTS.threshold
                 ),
+                0,
+                255
+            );
 
-            heightMM:
-                number(
-                    options.heightMM ??
-                    label.labelHeight,
-                    DEFAULTS.heightMM
-                ),
+
+        /*
+        ------------------------------------------------
+        RETURN
+        ------------------------------------------------
+        */
+
+        return {
+
+            widthMM,
+
+            heightMM,
 
             dpi,
 
             widthDots,
+
             heightDots,
 
-            gap:
-                number(
-                    options.gap ??
-                    label.gap ??
-                    printer.gap,
-                    DEFAULTS.gap
-                ),
+            gap,
 
-            density:
-                clamp(
-                    number(
-                        options.density ??
-                        printer.density ??
-                        settings.density,
-                        DEFAULTS.density
-                    ),
-                    0,
-                    15
-                ),
+            density,
 
-            speed:
-                clamp(
-                    number(
-                        options.speed ??
-                        printer.speed ??
-                        settings.speed,
-                        DEFAULTS.speed
-                    ),
-                    1,
-                    12
-                ),
+            speed,
 
-            copies:
+            copies,
+
+            x:
                 Math.max(
-                    1,
+                    0,
                     Math.floor(
                         number(
-                            options.copies ??
-                            printer.copies ??
-                            settings.copies,
-                            DEFAULTS.copies
+                            options.x,
+                            DEFAULTS.x
                         )
                     )
                 ),
 
-            threshold:
-                clamp(
-                    number(
-                        options.threshold,
-                        DEFAULTS.threshold
-                    ),
+            y:
+                Math.max(
                     0,
-                    255
+                    Math.floor(
+                        number(
+                            options.y,
+                            DEFAULTS.y
+                        )
+                    )
                 ),
 
-            invert:
-                options.invert === true,
+            bitmapMode: 0,
 
-            transparentIsWhite:
-                options.transparentIsWhite !== false,
+            threshold,
 
-            bitmapMode:
-                number(
-                    options.bitmapMode,
-                    DEFAULTS.bitmapMode
-                )
+            /*
+             * Selalu OFF.
+             */
+
+            invert: false,
+
+            transparentIsWhite: true
 
         };
-
-
-        return config;
 
     }
 
 
     /*
     =================================================
-     CANVAS VALIDATION
+    CANVAS VALIDATION
     =================================================
     */
 
@@ -345,7 +517,7 @@ const TSPL = (() => {
         ) {
 
             throw new Error(
-                "TSPL: Object bukan HTMLCanvasElement."
+                "TSPL: Object bukan canvas."
             );
 
         }
@@ -367,13 +539,12 @@ const TSPL = (() => {
 
     /*
     =================================================
-     RESAMPLE CANVAS
+    CREATE RASTER CANVAS
     =================================================
-     IMPORTANT:
-     -----------------------------
-     Canvas asli TIDAK disentuh.
-     Kita membuat Offscreen Canvas /
-     Canvas sementara.
+
+    Canvas asli TIDAK disentuh.
+
+    Semua proses dilakukan pada canvas sementara.
     =================================================
     */
 
@@ -383,61 +554,90 @@ const TSPL = (() => {
         height
     ) {
 
-        let canvas = null;
+        let raster;
 
 
         /*
-         * Prefer OffscreenCanvas jika tersedia.
-         */
+        ------------------------------------------------
+        OFFSCREEN CANVAS
+        ------------------------------------------------
+        */
 
         if (
-            typeof OffscreenCanvas !== "undefined"
+            typeof global.OffscreenCanvas !==
+            "undefined"
         ) {
 
-            canvas =
-                new OffscreenCanvas(
+            raster =
+                new global.OffscreenCanvas(
                     width,
                     height
                 );
 
         } else {
 
-            canvas =
-                document.createElement("canvas");
+            raster =
+                global.document.createElement(
+                    "canvas"
+                );
 
-            canvas.width = width;
-            canvas.height = height;
+
+            raster.width =
+                width;
+
+            raster.height =
+                height;
 
         }
 
 
         const ctx =
-            canvas.getContext("2d", {
-                willReadFrequently: true
-            });
+            raster.getContext(
+                "2d",
+                {
+                    willReadFrequently: true
+                }
+            );
 
 
         if (!ctx) {
 
             throw new Error(
-                "TSPL: Tidak dapat membuat 2D context."
+                "TSPL: 2D context tidak tersedia."
             );
 
         }
 
 
         /*
-         * Background printer selalu WHITE.
-         *
-         * Ini penting agar:
-         * - transparansi = putih
-         * - PNG transparent = putih
-         * - tidak terjadi black background
-         */
+        ------------------------------------------------
+        IMPORTANT
+        ------------------------------------------------
+
+        Bersihkan canvas terlebih dahulu.
+
+        Kemudian isi PUTIH.
+
+        Ini mencegah:
+
+        transparent -> black
+        ------------------------------------------------
+        */
 
         ctx.save();
 
-        ctx.fillStyle = "#FFFFFF";
+
+        ctx.globalCompositeOperation =
+            "source-over";
+
+
+        ctx.globalAlpha =
+            1;
+
+
+        ctx.fillStyle =
+            "#FFFFFF";
+
 
         ctx.fillRect(
             0,
@@ -448,22 +648,47 @@ const TSPL = (() => {
 
 
         /*
-         * Jangan mengubah source canvas.
-         *
-         * drawImage hanya membaca source.
-         */
+        ------------------------------------------------
+        IMAGE SMOOTHING
+        ------------------------------------------------
+        */
 
-        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingEnabled =
+            true;
 
-        ctx.imageSmoothingQuality = "high";
 
+        try {
+
+            ctx.imageSmoothingQuality =
+                "high";
+
+        } catch (error) {}
+
+
+        /*
+        ------------------------------------------------
+        COPY SOURCE
+        ------------------------------------------------
+
+        Hanya membaca source canvas.
+
+        Tidak ada:
+
+        clearRect(source)
+        fillRect(source)
+        filter(source)
+        invert(source)
+        ------------------------------------------------
+        */
 
         ctx.drawImage(
             sourceCanvas,
+
             0,
             0,
             sourceCanvas.width,
             sourceCanvas.height,
+
             0,
             0,
             width,
@@ -474,14 +699,14 @@ const TSPL = (() => {
         ctx.restore();
 
 
-        return canvas;
+        return raster;
 
     }
 
 
     /*
     =================================================
-     PIXEL -> BLACK / WHITE
+    PIXEL -> BLACK / WHITE
     =================================================
     */
 
@@ -494,12 +719,14 @@ const TSPL = (() => {
     ) {
 
         /*
-         * Alpha 0:
-         *
-         * Transparent dianggap WHITE.
-         */
+        ------------------------------------------------
+        TRANSPARENT
+        ------------------------------------------------
+        */
 
-        if (a === 0) {
+        if (
+            a === 0
+        ) {
 
             return false;
 
@@ -507,16 +734,27 @@ const TSPL = (() => {
 
 
         /*
-         * Composite terhadap WHITE.
-         *
-         * Jadi pixel semi-transparent tidak
-         * menghasilkan blok hitam.
-         */
+        ------------------------------------------------
+        ALPHA COMPOSITE TO WHITE
+        ------------------------------------------------
 
-        if (a < 255) {
+        Semi transparent black:
+
+        black + white
+        =
+        gray
+
+        bukan black block.
+        ------------------------------------------------
+        */
+
+        if (
+            a < 255
+        ) {
 
             const alpha =
                 a / 255;
+
 
             r =
                 Math.round(
@@ -524,11 +762,13 @@ const TSPL = (() => {
                     255 * (1 - alpha)
                 );
 
+
             g =
                 Math.round(
                     g * alpha +
                     255 * (1 - alpha)
                 );
+
 
             b =
                 Math.round(
@@ -540,10 +780,10 @@ const TSPL = (() => {
 
 
         /*
-         * Luminance.
-         *
-         * Human eye weighted grayscale.
-         */
+        ------------------------------------------------
+        LUMINANCE
+        ------------------------------------------------
+        */
 
         const gray =
             (
@@ -554,35 +794,23 @@ const TSPL = (() => {
 
 
         /*
-         * Hitam jika luminance lebih rendah
-         * dari threshold.
-         */
-
-        let black =
-            gray < threshold;
-
+        ------------------------------------------------
+        BLACK
+        ------------------------------------------------
+        */
 
         /*
-         * Invert hanya jika explicitly diminta.
-         *
-         * Default FALSE.
+         * Invert sengaja TIDAK dilakukan.
          */
 
-        if (false) {
-
-            black = !black;
-
-        }
-
-
-        return black;
+        return gray < threshold;
 
     }
 
 
     /*
     =================================================
-     CANVAS -> BITMAP BYTES
+    CANVAS -> RAW BITMAP
     =================================================
     */
 
@@ -599,18 +827,29 @@ const TSPL = (() => {
         const width =
             config.widthDots;
 
+
         const height =
             config.heightDots;
 
 
         /*
-         * TSPL BITMAP menggunakan BYTE WIDTH.
-         *
-         * 799 dots:
-         *
-         * ceil(799 / 8)
-         * = 100 bytes
-         */
+        ------------------------------------------------
+        BYTE WIDTH
+        ------------------------------------------------
+
+        799 dots / 8
+
+        = 99.875
+
+        ceil = 100 bytes
+
+        Padding:
+
+        100 * 8 = 800 dots
+
+        Dot ke-800 HARUS WHITE.
+        ------------------------------------------------
+        */
 
         const bytesPerRow =
             Math.ceil(
@@ -653,40 +892,31 @@ const TSPL = (() => {
             imageData.data;
 
 
+        /*
+        ------------------------------------------------
+        RAW BITMAP
+        ------------------------------------------------
+
+        Uint8Array otomatis:
+
+        0 = WHITE
+        ------------------------------------------------
+        */
+
         const bitmap =
             new Uint8Array(
                 totalBytes
             );
 
 
-        /*
-         * Uint8Array otomatis berisi 0.
-         *
-         * Dalam TSPL:
-         *
-         * bit 1 = BLACK
-         * bit 0 = WHITE
-         *
-         * Jadi default 0 = WHITE.
-         */
-
         let blackPixels = 0;
 
 
         /*
-         * MSB FIRST
-         *
-         * Pixel pertama:
-         * bit 7
-         *
-         * pixel kedua:
-         * bit 6
-         *
-         * ...
-         *
-         * pixel kedelapan:
-         * bit 0
-         */
+        =================================================
+        RASTER LOOP
+        =================================================
+        */
 
         for (
             let y = 0;
@@ -704,6 +934,25 @@ const TSPL = (() => {
                 x++
             ) {
 
+                /*
+                ------------------------------------------------
+                PADDING PROTECTION
+                ------------------------------------------------
+
+                Walaupun width berubah suatu saat,
+                pixel di luar width tidak pernah diproses.
+                ------------------------------------------------
+                */
+
+                if (
+                    x >= width
+                ) {
+
+                    continue;
+
+                }
+
+
                 const pixelIndex =
                     (
                         y * width +
@@ -712,16 +961,27 @@ const TSPL = (() => {
 
 
                 const r =
-                    pixels[pixelIndex];
+                    pixels[
+                        pixelIndex
+                    ];
+
 
                 const g =
-                    pixels[pixelIndex + 1];
+                    pixels[
+                        pixelIndex + 1
+                    ];
+
 
                 const b =
-                    pixels[pixelIndex + 2];
+                    pixels[
+                        pixelIndex + 2
+                    ];
+
 
                 const a =
-                    pixels[pixelIndex + 3];
+                    pixels[
+                        pixelIndex + 3
+                    ];
 
 
                 const black =
@@ -744,34 +1004,98 @@ const TSPL = (() => {
                 blackPixels++;
 
 
+                /*
+                ------------------------------------------------
+                BYTE INDEX
+                ------------------------------------------------
+                */
+
                 const byteIndex =
                     rowOffset +
-                    Math.floor(x / 8);
+                    Math.floor(
+                        x / 8
+                    );
 
+
+                /*
+                ------------------------------------------------
+                MSB FIRST
+                ------------------------------------------------
+
+                x 0 -> bit 7
+                x 1 -> bit 6
+                x 2 -> bit 5
+                ...
+                x 7 -> bit 0
+                ------------------------------------------------
+                */
 
                 const bit =
                     7 -
                     (x % 8);
 
 
-                bitmap[byteIndex] |=
+                bitmap[
+                    byteIndex
+                ] |=
                     (1 << bit);
+
+            }
+
+
+            /*
+            ------------------------------------------------
+            FORCE LAST BYTE PADDING WHITE
+            ------------------------------------------------
+
+            799 dots menggunakan:
+
+            bit 7 ... bit 1
+
+            pada byte terakhir.
+
+            bit 0 = padding.
+
+            Pastikan bit 0 selalu 0.
+            ------------------------------------------------
+            */
+
+            if (
+                width % 8 !== 0
+            ) {
+
+                const lastByte =
+                    rowOffset +
+                    bytesPerRow -
+                    1;
+
+
+                const validBits =
+                    width % 8;
+
+
+                const mask =
+                    0xFF <<
+                    (8 - validBits);
+
+
+                bitmap[
+                    lastByte
+                ] &=
+                    mask;
 
             }
 
         }
 
 
-        /*
-         * Statistik untuk debugging.
-         */
-
         const totalPixels =
-            width * height;
+            width *
+            height;
 
 
         const blackRatio =
-            totalPixels
+            totalPixels > 0
                 ? blackPixels / totalPixels
                 : 0;
 
@@ -781,6 +1105,7 @@ const TSPL = (() => {
             bitmap,
 
             width,
+
             height,
 
             bytesPerRow,
@@ -800,182 +1125,32 @@ const TSPL = (() => {
 
     /*
     =================================================
-     BYTE ARRAY -> TSPL HEX STRING
+    TSPL HEADER
     =================================================
     */
 
-    function bytesToBinaryString(
-        bytes
-    ) {
+    function buildHeader(config) {
 
-        let result = "";
+        return [
 
-        const CHUNK =
-            8192;
+            `SIZE ${config.widthMM} mm,${config.heightMM} mm`,
 
+            `GAP ${config.gap} mm,0`,
 
-        /*
-         * Jangan menggunakan:
-         *
-         * String.fromCharCode(...bytes)
-         *
-         * karena bitmap label besar dapat
-         * menyebabkan stack overflow.
-         */
+            `DENSITY ${config.density}`,
 
-        for (
-            let i = 0;
-            i < bytes.length;
-            i += CHUNK
-        ) {
+            `SPEED ${config.speed}`,
 
-            const end =
-                Math.min(
-                    i + CHUNK,
-                    bytes.length
-                );
-
-
-            for (
-                let j = i;
-                j < end;
-                j++
-            ) {
-
-                result +=
-                    String.fromCharCode(
-                        bytes[j]
-                    );
-
-            }
-
-        }
-
-
-        return result;
-
-    }
-
-
-    /*
-    =================================================
-     BINARY STRING -> UINT8 ARRAY
-    =================================================
-    */
-
-    function toUint8Array(
-        binary
-    ) {
-
-        if (
-            binary instanceof Uint8Array
-        ) {
-
-            return binary;
-
-        }
-
-
-        if (
-            binary instanceof ArrayBuffer
-        ) {
-
-            return new Uint8Array(
-                binary
-            );
-
-        }
-
-
-        const result =
-            new Uint8Array(
-                binary.length
-            );
-
-
-        for (
-            let i = 0;
-            i < binary.length;
-            i++
-        ) {
-
-            result[i] =
-                binary.charCodeAt(i) & 0xFF;
-
-        }
-
-
-        return result;
-
-    }
-
-
-    /*
-    =================================================
-     TSPL HEADER
-    =================================================
-    */
-
-    function buildHeader(
-        config
-    ) {
-
-        const lines = [];
-
-
-        /*
-         * Label size.
-         */
-
-        lines.push(
-            `SIZE ${config.widthMM} mm,${config.heightMM} mm`
-        );
-
-
-        /*
-         * Gap.
-         */
-
-        lines.push(
-            `GAP ${config.gap} mm,0`
-        );
-
-
-        /*
-         * Density mengikuti Printer.
-         */
-
-        lines.push(
-            `DENSITY ${config.density}`
-        );
-
-
-        /*
-         * Speed mengikuti Printer.
-         */
-
-        lines.push(
-            `SPEED ${config.speed}`
-        );
-
-
-        /*
-         * Clear previous job.
-         */
-
-        lines.push(
             "CLS"
-        );
 
-
-        return lines.join("\r\n");
+        ].join("\r\n");
 
     }
 
 
     /*
     =================================================
-     TSPL BITMAP COMMAND
+    BITMAP COMMAND
     =================================================
     */
 
@@ -984,31 +1159,11 @@ const TSPL = (() => {
         config
     ) {
 
-        const widthBytes =
-            bitmapData.bytesPerRow;
-
-
-        const height =
-            bitmapData.height;
-
-
-        /*
-         * TSPL:
-         *
-         * BITMAP
-         * x
-         * y
-         * width(bytes)
-         * height
-         * mode
-         * data
-         *
-         * Mode 0:
-         * OVERWRITE
-         */
-
         const command =
-            `BITMAP ${config.x},${config.y},${widthBytes},${height},${config.bitmapMode},`;
+            `BITMAP ${config.x},${config.y},` +
+            `${bitmapData.bytesPerRow},` +
+            `${bitmapData.height},` +
+            `0,`;
 
 
         return {
@@ -1025,13 +1180,11 @@ const TSPL = (() => {
 
     /*
     =================================================
-     PRINT COMMAND
+    PRINT COMMAND
     =================================================
     */
 
-    function buildPrintCommand(
-        config
-    ) {
+    function buildPrintCommand(config) {
 
         return (
             `PRINT ${config.copies},1`
@@ -1042,7 +1195,7 @@ const TSPL = (() => {
 
     /*
     =================================================
-     BUILD TSPL JOB
+    BUILD JOB
     =================================================
     */
 
@@ -1058,26 +1211,33 @@ const TSPL = (() => {
 
 
         /*
-         * Safety:
-         *
-         * Jangan mengizinkan ukuran 0.
-         */
+        ------------------------------------------------
+        VALIDATION
+        ------------------------------------------------
+        */
 
         if (
-            config.widthDots <= 0 ||
-            config.heightDots <= 0
+            config.widthDots !==
+            TARGET.widthDots ||
+            config.heightDots !==
+            TARGET.heightDots
         ) {
 
-            throw new Error(
-                "TSPL: Ukuran label tidak valid."
+            console.warn(
+                "TSPL: Target raster:",
+                config.widthDots,
+                "x",
+                config.heightDots
             );
 
         }
 
 
         /*
-         * Konversi canvas.
-         */
+        ------------------------------------------------
+        CANVAS -> BITMAP
+        ------------------------------------------------
+        */
 
         const bitmap =
             canvasToBitmap(
@@ -1087,34 +1247,51 @@ const TSPL = (() => {
 
 
         /*
-         * Prevent accidental full black
-         * label.
-         *
-         * Jika hampir seluruh pixel hitam,
-         * kemungkinan canvas/transparency bermasalah.
-         *
-         * Kita tidak mengubah canvas.
-         * Hanya menghentikan job agar printer
-         * tidak mencetak label hitam.
-         */
+        =================================================
+        BLACK BLOCK PROTECTION
+        =================================================
+
+        Jangan kirim label jika bitmap benar-benar
+        hampir seluruhnya hitam.
+
+        Ini bukan transformasi canvas.
+
+        Hanya safety check.
+        =================================================
+        */
 
         if (
             bitmap.blackRatio >= 0.98
         ) {
 
             throw new Error(
-                "TSPL: Raster terdeteksi hampir seluruhnya hitam. " +
-                "Job dibatalkan untuk mencegah label menjadi blok hitam."
+                "TSPL: Bitmap terdeteksi " +
+                (bitmap.blackRatio * 100).toFixed(2) +
+                "% hitam. " +
+                "Job dibatalkan untuk mencegah " +
+                "label menjadi blok hitam."
             );
 
         }
 
+
+        /*
+        ------------------------------------------------
+        HEADER
+        ------------------------------------------------
+        */
 
         const header =
             buildHeader(
                 config
             );
 
+
+        /*
+        ------------------------------------------------
+        BITMAP
+        ------------------------------------------------
+        */
 
         const bitmapCommand =
             buildBitmapCommand(
@@ -1123,6 +1300,12 @@ const TSPL = (() => {
             );
 
 
+        /*
+        ------------------------------------------------
+        PRINT
+        ------------------------------------------------
+        */
+
         const printCommand =
             buildPrintCommand(
                 config
@@ -1130,19 +1313,28 @@ const TSPL = (() => {
 
 
         /*
-         * TSPL job:
-         *
-         * Header
-         * BITMAP
-         * Binary bitmap
-         * PRINT
-         */
+        ------------------------------------------------
+        PREFIX
+        ------------------------------------------------
+
+        TSPL command + separator.
+
+        Setelah comma pada BITMAP command,
+        langsung masuk raw bitmap.
+        ------------------------------------------------
+        */
 
         const prefix =
             header +
             "\r\n" +
             bitmapCommand.command;
 
+
+        /*
+        ------------------------------------------------
+        SUFFIX
+        ------------------------------------------------
+        */
 
         const suffix =
             "\r\n" +
@@ -1151,8 +1343,15 @@ const TSPL = (() => {
 
 
         /*
-         * Encode ASCII command + raw bitmap.
-         */
+        ------------------------------------------------
+        ENCODE COMMAND ONLY
+        ------------------------------------------------
+
+        Bitmap TIDAK di-encode.
+
+        Bitmap tetap raw Uint8Array.
+        ------------------------------------------------
+        */
 
         const encoder =
             new TextEncoder();
@@ -1170,11 +1369,23 @@ const TSPL = (() => {
             );
 
 
+        /*
+        ------------------------------------------------
+        TOTAL
+        ------------------------------------------------
+        */
+
         const totalLength =
             prefixBytes.length +
             bitmap.bitmap.length +
             suffixBytes.length;
 
+
+        /*
+        ------------------------------------------------
+        FINAL RAW JOB
+        ------------------------------------------------
+        */
 
         const output =
             new Uint8Array(
@@ -1190,6 +1401,7 @@ const TSPL = (() => {
             offset
         );
 
+
         offset +=
             prefixBytes.length;
 
@@ -1198,6 +1410,7 @@ const TSPL = (() => {
             bitmap.bitmap,
             offset
         );
+
 
         offset +=
             bitmap.bitmap.length;
@@ -1209,6 +1422,12 @@ const TSPL = (() => {
         );
 
 
+        /*
+        ------------------------------------------------
+        RESULT
+        ------------------------------------------------
+        */
+
         return {
 
             data: output,
@@ -1219,7 +1438,11 @@ const TSPL = (() => {
 
             prefix,
 
-            suffix
+            suffix,
+
+            prefixBytes,
+
+            suffixBytes
 
         };
 
@@ -1228,7 +1451,7 @@ const TSPL = (() => {
 
     /*
     =================================================
-     BUILD FROM PREVIEW CANVAS
+    FROM CANVAS
     =================================================
     */
 
@@ -1247,7 +1470,232 @@ const TSPL = (() => {
 
     /*
     =================================================
-     PRINT
+    RAW TRANSPORT
+    =================================================
+    */
+
+    async function sendRaw(data) {
+
+        if (
+            !(data instanceof Uint8Array)
+        ) {
+
+            if (
+                data instanceof ArrayBuffer
+            ) {
+
+                data =
+                    new Uint8Array(
+                        data
+                    );
+
+            } else {
+
+                throw new Error(
+                    "TSPL: Data harus Uint8Array."
+                );
+
+            }
+
+        }
+
+
+        /*
+        =================================================
+        1. Printer Manager
+        =================================================
+        */
+
+        if (
+            typeof global.Printer !==
+            "undefined" &&
+            global.Printer
+        ) {
+
+            if (
+                typeof global.Printer.printRaw ===
+                "function"
+            ) {
+
+                return await global.Printer.printRaw(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof global.Printer.sendRaw ===
+                "function"
+            ) {
+
+                return await global.Printer.sendRaw(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof global.Printer.send ===
+                "function"
+            ) {
+
+                return await global.Printer.send(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof global.Printer.write ===
+                "function"
+            ) {
+
+                return await global.Printer.write(
+                    data
+                );
+
+            }
+
+        }
+
+
+        /*
+        =================================================
+        2. PrinterManager
+        =================================================
+        */
+
+        if (
+            typeof global.PrinterManager !==
+            "undefined" &&
+            global.PrinterManager
+        ) {
+
+            if (
+                typeof global.PrinterManager.printRaw ===
+                "function"
+            ) {
+
+                return await global.PrinterManager.printRaw(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof global.PrinterManager.sendRaw ===
+                "function"
+            ) {
+
+                return await global.PrinterManager.sendRaw(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof global.PrinterManager.send ===
+                "function"
+            ) {
+
+                return await global.PrinterManager.send(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof global.PrinterManager.write ===
+                "function"
+            ) {
+
+                return await global.PrinterManager.write(
+                    data
+                );
+
+            }
+
+        }
+
+
+        /*
+        =================================================
+        3. Bluetooth
+        =================================================
+        */
+
+        if (
+            typeof global.Bluetooth !==
+            "undefined" &&
+            global.Bluetooth
+        ) {
+
+            if (
+                typeof global.Bluetooth.sendRaw ===
+                "function"
+            ) {
+
+                return await global.Bluetooth.sendRaw(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof global.Bluetooth.writeRaw ===
+                "function"
+            ) {
+
+                return await global.Bluetooth.writeRaw(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof global.Bluetooth.send ===
+                "function"
+            ) {
+
+                return await global.Bluetooth.send(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof global.Bluetooth.write ===
+                "function"
+            ) {
+
+                return await global.Bluetooth.write(
+                    data
+                );
+
+            }
+
+        }
+
+
+        throw new Error(
+            "TSPL: Tidak ditemukan RAW transport."
+        );
+
+    }
+
+
+    /*
+    =================================================
+    PRINT
     =================================================
     */
 
@@ -1263,148 +1711,8 @@ const TSPL = (() => {
             );
 
 
-        /*
-         * Jika Printer Manager tersedia,
-         * gunakan API yang tersedia.
-         */
-
-        if (
-            typeof Printer !== "undefined"
-        ) {
-
-            /*
-             * printRaw()
-             */
-
-            if (
-                typeof Printer.printRaw ===
-                "function"
-            ) {
-
-                return await Printer.printRaw(
-                    job.data
-                );
-
-            }
-
-
-            /*
-             * send()
-             */
-
-            if (
-                typeof Printer.send ===
-                "function"
-            ) {
-
-                return await Printer.send(
-                    job.data
-                );
-
-            }
-
-
-            /*
-             * write()
-             */
-
-            if (
-                typeof Printer.write ===
-                "function"
-            ) {
-
-                return await Printer.write(
-                    job.data
-                );
-
-            }
-
-        }
-
-
-        /*
-         * SmartPrint Printer Manager v4.1
-         */
-
-        if (
-            typeof PrinterManager !==
-            "undefined"
-        ) {
-
-            if (
-                typeof PrinterManager.printRaw ===
-                "function"
-            ) {
-
-                return await PrinterManager.printRaw(
-                    job.data
-                );
-
-            }
-
-
-            if (
-                typeof PrinterManager.send ===
-                "function"
-            ) {
-
-                return await PrinterManager.send(
-                    job.data
-                );
-
-            }
-
-
-            if (
-                typeof PrinterManager.write ===
-                "function"
-            ) {
-
-                return await PrinterManager.write(
-                    job.data
-                );
-
-            }
-
-        }
-
-
-        /*
-         * SmartPrint Bluetooth Engine
-         */
-
-        if (
-            typeof Bluetooth !== "undefined"
-        ) {
-
-            if (
-                typeof Bluetooth.send ===
-                "function"
-            ) {
-
-                return await Bluetooth.send(
-                    job.data
-                );
-
-            }
-
-
-            if (
-                typeof Bluetooth.write ===
-                "function"
-            ) {
-
-                return await Bluetooth.write(
-                    job.data
-                );
-
-            }
-
-        }
-
-
-        throw new Error(
-            "TSPL: Tidak ditemukan Printer Manager / Bluetooth transport."
+        return await sendRaw(
+            job.data
         );
 
     }
@@ -1412,7 +1720,7 @@ const TSPL = (() => {
 
     /*
     =================================================
-     DEBUG INFORMATION
+    INSPECT
     =================================================
     */
 
@@ -1430,9 +1738,31 @@ const TSPL = (() => {
 
         return {
 
-            version: VERSION,
+            version:
+                VERSION,
 
-            config: job.config,
+            target: {
+                widthMM:
+                    TARGET.widthMM,
+
+                heightMM:
+                    TARGET.heightMM,
+
+                dpi:
+                    TARGET.dpi,
+
+                widthDots:
+                    TARGET.widthDots,
+
+                heightDots:
+                    TARGET.heightDots,
+
+                bytesPerRow:
+                    TARGET.bytesPerRow
+            },
+
+            config:
+                job.config,
 
             widthDots:
                 job.bitmap.width,
@@ -1461,10 +1791,10 @@ const TSPL = (() => {
                     100
                 ).toFixed(2) + "%",
 
-            tsplPrefix:
+            prefix:
                 job.prefix,
 
-            tsplSuffix:
+            suffix:
                 job.suffix,
 
             dataSize:
@@ -1477,7 +1807,7 @@ const TSPL = (() => {
 
     /*
     =================================================
-     TEST BITMAP
+    TEST
     =================================================
     */
 
@@ -1486,102 +1816,124 @@ const TSPL = (() => {
         options = {}
     ) {
 
-        try {
-
-            const info =
-                inspect(
-                    canvas,
-                    options
-                );
-
-
-            console.log(
-                "===================================="
-            );
-
-            console.log(
-                "SmartPrint TSPL Engine v" +
-                VERSION
-            );
-
-            console.log(
-                "===================================="
-            );
-
-            console.log(
-                "Label:",
-                info.config.widthMM,
-                "x",
-                info.config.heightMM,
-                "mm"
-            );
-
-            console.log(
-                "DPI:",
-                info.config.dpi
-            );
-
-            console.log(
-                "Dots:",
-                info.widthDots,
-                "x",
-                info.heightDots
-            );
-
-            console.log(
-                "Bytes / Row:",
-                info.bytesPerRow
-            );
-
-            console.log(
-                "Bitmap:",
-                info.bitmapBytes,
-                "bytes"
-            );
-
-            console.log(
-                "Black:",
-                info.blackPercent
-            );
-
-            console.log(
-                "Data:",
-                info.dataSize,
-                "bytes"
-            );
-
-            console.log(
-                "===================================="
+        const info =
+            inspect(
+                canvas,
+                options
             );
 
 
-            return info;
+        console.log(
+            "========================================"
+        );
 
-        } catch (error) {
 
-            console.error(
-                "TSPL Test Error:",
-                error
-            );
+        console.log(
+            "SmartPrint TSPL Engine v" +
+            VERSION
+        );
 
-            throw error;
 
-        }
+        console.log(
+            "========================================"
+        );
+
+
+        console.log(
+            "Target:",
+            TARGET.widthMM +
+            " x " +
+            TARGET.heightMM +
+            " mm"
+        );
+
+
+        console.log(
+            "DPI:",
+            TARGET.dpi
+        );
+
+
+        console.log(
+            "Dots:",
+            info.widthDots +
+            " x " +
+            info.heightDots
+        );
+
+
+        console.log(
+            "Bytes / Row:",
+            info.bytesPerRow
+        );
+
+
+        console.log(
+            "Bitmap:",
+            info.bitmapBytes,
+            "bytes"
+        );
+
+
+        console.log(
+            "Black:",
+            info.blackPercent
+        );
+
+
+        console.log(
+            "Threshold:",
+            info.config.threshold
+        );
+
+
+        console.log(
+            "Invert:",
+            info.config.invert
+        );
+
+
+        console.log(
+            "Bitmap Mode:",
+            info.config.bitmapMode
+        );
+
+
+        console.log(
+            "Data:",
+            info.dataSize,
+            "bytes"
+        );
+
+
+        console.log(
+            "========================================"
+        );
+
+
+        return info;
 
     }
 
 
     /*
     =================================================
-     PUBLIC API
+    PUBLIC API
     =================================================
     */
 
-    return {
+    const API = {
 
-        version: VERSION,
+        version:
+            VERSION,
 
-        defaults: DEFAULTS,
+        target:
+            TARGET,
+
+        defaults:
+            DEFAULTS,
+
+        getSettings,
 
         getPrinterConfig,
 
@@ -1599,6 +1951,8 @@ const TSPL = (() => {
 
         fromCanvas,
 
+        sendRaw,
+
         print,
 
         inspect,
@@ -1607,38 +1961,62 @@ const TSPL = (() => {
 
     };
 
-})();
+
+    /*
+    =================================================
+    GLOBAL EXPORT
+    =================================================
+
+    IMPORTANT:
+
+    Jangan:
+
+    const TSPL = ...
+
+    Kita hanya assign ke window/global.
+    =================================================
+    */
+
+    global.TSPL =
+        API;
 
 
-/*
-=====================================================
- GLOBAL EXPORT
-=====================================================
-*/
+    /*
+    Compatibility aliases
+    */
 
-window.TSPL = TSPL;
-
-
-/*
-=====================================================
- COMPATIBILITY ALIASES
-=====================================================
-*/
-
-window.TSPL_ENGINE = TSPL;
-window.TSPLPrinter = TSPL;
+    global.TSPL_ENGINE =
+        API;
 
 
-/*
-=====================================================
- READY LOG
-=====================================================
-*/
+    global.TSPLPrinter =
+        API;
 
-console.log(
-    "SmartPrint TSPL Engine v5.2 Ready"
-);
 
-console.log(
-    "Target: 100 x 150 mm | 203 DPI | 799 x 1199 dots"
-);
+    /*
+    =================================================
+    READY
+    =================================================
+    */
+
+    console.log(
+        "SmartPrint TSPL Engine v" +
+        VERSION +
+        " Ready"
+    );
+
+
+    console.log(
+        "Target: 100 x 150 mm | " +
+        "203 DPI | " +
+        "799 x 1199 dots"
+    );
+
+
+    console.log(
+        "Bitmap: RAW Uint8Array | " +
+        "MSB FIRST | Mode 0"
+    );
+
+
+})(window);
