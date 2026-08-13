@@ -1,27 +1,50 @@
 "use strict";
 
 /*
-=====================================================
- SmartPrint TSPL Engine v1.0
-=====================================================
+=========================================================
+ SmartPrint TSPL Engine v2.0
+=========================================================
 
-Canvas
-  ↓
-Bitmap Converter
-  ↓
-TSPL Command
-  ↓
-Bluetooth.write()
-  ↓
-Bluetooth Printer
+ COMPATIBLE
+ --------------------------------------------------------
+ ✓ Bluetooth Engine v5.0
+ ✓ PrinterManager v4.0
+ ✓ Bluetooth.write()
+ ✓ BLE
+ ✓ Web Serial / Bluetooth Classic
+ ✓ Local Bridge
+ ✓ TSPL Thermal Label Printer
+ ✓ Canvas → 1-bit bitmap
+ ✓ White background protection
+ ✓ Alpha protection
+ ✓ Threshold
+ ✓ Floyd-Steinberg dithering
+ ✓ Density
+ ✓ Speed
+ ✓ Copies
+ ✓ Label width / height
+ ✓ Gap
+ ✓ Rotation
+ ✓ Preview Canvas
 
-Target:
-- TSPL label printer
-- Bluetooth BLE
-- DPI 203
-- Label mm
-=====================================================
+ IMPORTANT
+ --------------------------------------------------------
+ PrinterManager:
+
+    TSPL.print(canvas, PrinterManager)
+
+ TSPL Engine kemudian:
+
+    Bluetooth.write(bytes)
+
+ Tidak menggunakan:
+    Bluetooth.send()
+    Bluetooth.print()
+    navigator.bluetooth langsung
+
+=========================================================
 */
+
 
 (function () {
 
@@ -30,18 +53,24 @@ Target:
 
     const TSPL = {
 
+        // =================================================
+        // VERSION
+        // =================================================
+
+        version: "2.0.0",
+
 
         // =================================================
         // DEFAULT
         // =================================================
 
-        defaultDPI: 203,
+        threshold: 185,
 
-        defaultLabelWidth: 100,
+        dithering: false,
 
-        defaultLabelHeight: 150,
+        invert: false,
 
-        defaultGap: 2,
+        chunkSize: 180,
 
 
         // =================================================
@@ -50,23 +79,47 @@ Target:
 
         async print(canvas, printer) {
 
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "SMARTPRINT TSPL ENGINE v2.0"
+            );
+
+            console.log(
+                "========================================"
+            );
+
+
+            // ------------------------------------------------
+            // VALIDATE CANVAS
+            // ------------------------------------------------
+
             if (!canvas) {
 
                 throw new Error(
-                    "Canvas tidak tersedia."
+                    "TSPL: Canvas tidak tersedia."
                 );
 
             }
 
 
-            if (!printer) {
+            if (
+                typeof canvas.getContext !==
+                "function"
+            ) {
 
                 throw new Error(
-                    "Printer Manager tidak tersedia."
+                    "TSPL: Object bukan canvas."
                 );
 
             }
 
+
+            // ------------------------------------------------
+            // VALIDATE BLUETOOTH
+            // ------------------------------------------------
 
             if (
                 typeof Bluetooth ===
@@ -74,226 +127,252 @@ Target:
             ) {
 
                 throw new Error(
-                    "Bluetooth Engine tidak ditemukan."
+                    "TSPL: Bluetooth Engine tidak ditemukan."
                 );
 
             }
 
 
             if (
-                !Bluetooth.isConnected()
+                typeof Bluetooth.write !==
+                "function"
             ) {
 
                 throw new Error(
-                    "Bluetooth Printer belum terhubung."
+                    "TSPL: Bluetooth.write() tidak tersedia."
                 );
 
             }
 
 
-            console.log(
-                "========================================"
-            );
+            // ------------------------------------------------
+            // PRINTER SETTINGS
+            // ------------------------------------------------
 
-            console.log(
-                "TSPL PRINT"
-            );
-
-            console.log(
-                "========================================"
-            );
+            printer =
+                printer ||
+                window.Printer ||
+                {};
 
 
-            // =============================================
-            // SETTINGS
-            // =============================================
+            const width =
+                Number(
+                    printer.paperWidth
+                ) ||
+                canvas.width;
+
+
+            const height =
+                Number(
+                    printer.paperHeight
+                ) ||
+                canvas.height;
+
 
             const dpi =
                 Number(
                     printer.dpi
                 ) ||
-                this.defaultDPI;
+                203;
 
 
-            /*
-            Printer.paperWidth / paperHeight
-            di PrinterManager adalah pixel/dot.
-
-            Jika tersedia Settings label mm,
-            kita gunakan labelWidth / labelHeight.
-            */
-
-            let labelWidthMM =
-                this.defaultLabelWidth;
-
-
-            let labelHeightMM =
-                this.defaultLabelHeight;
-
-
-            let gapMM =
-                this.defaultGap;
-
-
-            if (
-                typeof Settings !==
-                "undefined"
-            ) {
-
-                if (
-                    Settings.labelWidth
-                ) {
-
-                    labelWidthMM =
-                        Number(
-                            Settings.labelWidth
-                        );
-
-                }
-
-
-                if (
-                    Settings.labelHeight
-                ) {
-
-                    labelHeightMM =
-                        Number(
-                            Settings.labelHeight
-                        );
-
-                }
-
-
-                if (
-                    Settings.gap !==
-                    undefined
-                ) {
-
-                    gapMM =
-                        Number(
-                            Settings.gap
-                        );
-
-                }
-
-            }
-
-
-            // =============================================
-            // MM → DOT
-            // =============================================
-
-            const widthDot =
-                this.mmToDot(
-                    labelWidthMM,
-                    dpi
+            const density =
+                Number(
+                    printer.density
                 );
 
 
-            const heightDot =
-                this.mmToDot(
-                    labelHeightMM,
-                    dpi
+            const speed =
+                Number(
+                    printer.speed
                 );
 
 
-            const gapDot =
-                this.mmToDot(
-                    gapMM,
-                    dpi
+            const copies =
+                Math.max(
+                    1,
+                    Number(
+                        printer.copies
+                    ) || 1
+                );
+
+
+            // ------------------------------------------------
+            // LABEL SETTINGS
+            // ------------------------------------------------
+
+            const labelWidth =
+                Number(
+                    printer.labelWidth
+                ) ||
+                null;
+
+
+            const labelHeight =
+                Number(
+                    printer.labelHeight
+                ) ||
+                null;
+
+
+            const gap =
+                Number(
+                    printer.gap
+                );
+
+
+            // ------------------------------------------------
+            // RESOLVE SIZE
+            // ------------------------------------------------
+
+            const finalWidth =
+                this.resolveWidth(
+                    canvas,
+                    width,
+                    dpi,
+                    labelWidth
+                );
+
+
+            const finalHeight =
+                this.resolveHeight(
+                    canvas,
+                    height,
+                    dpi,
+                    labelHeight
                 );
 
 
             console.log(
-                "Label:",
-                labelWidthMM,
+                "TSPL Canvas:",
+                canvas.width,
                 "x",
-                labelHeightMM,
-                "mm"
+                canvas.height
             );
 
 
             console.log(
-                "Dots:",
-                widthDot,
+                "TSPL Print:",
+                finalWidth,
                 "x",
-                heightDot
+                finalHeight
             );
 
 
-            // =============================================
-            // CONVERT CANVAS
-            // =============================================
+            console.log(
+                "DPI:",
+                dpi
+            );
+
+
+            console.log(
+                "Density:",
+                density
+            );
+
+
+            console.log(
+                "Speed:",
+                speed
+            );
+
+
+            console.log(
+                "Copies:",
+                copies
+            );
+
+
+            // ------------------------------------------------
+            // BUILD BITMAP
+            // ------------------------------------------------
 
             const bitmap =
                 this.canvasToBitmap(
                     canvas,
-                    widthDot,
-                    heightDot
+                    finalWidth,
+                    finalHeight
                 );
 
 
-            // =============================================
-            // BUILD TSPL
-            // =============================================
-
-            const command =
-                this.buildCommand({
-
-                    widthMM:
-                        labelWidthMM,
-
-                    heightMM:
-                        labelHeightMM,
-
-                    gapMM:
-                        gapMM,
-
-                    widthDot:
-                        widthDot,
-
-                    heightDot:
-                        heightDot,
-
-                    gapDot:
-                        gapDot,
-
-                    bitmap:
-                        bitmap,
-
-                    printer:
-                        printer
-
-                });
+            console.log(
+                "Bitmap:",
+                bitmap.width,
+                "x",
+                bitmap.height
+            );
 
 
             console.log(
-                "TSPL command size:",
+                "Bitmap Bytes:",
+                bitmap.data.length
+            );
+
+
+            // ------------------------------------------------
+            // BUILD TSPL COMMAND
+            // ------------------------------------------------
+
+            const header =
+                this.buildHeader(
+                    finalWidth,
+                    finalHeight,
+                    dpi,
+                    density,
+                    speed,
+                    gap
+                );
+
+
+            const printCommand =
+                `PRINT ${copies}\r\n`;
+
+
+            const command =
+                this.concatUint8Arrays([
+
+                    this.textToBytes(
+                        header
+                    ),
+
+                    bitmap.data,
+
+                    this.textToBytes(
+                        "\r\n"
+                    ),
+
+                    this.textToBytes(
+                        printCommand
+                    )
+
+                ]);
+
+
+            console.log(
+                "TSPL Total Bytes:",
                 command.length
             );
 
 
-            // =============================================
+            // ------------------------------------------------
             // SEND
-            // =============================================
+            // ------------------------------------------------
 
-            const result =
-                await Bluetooth.write(
-                    command
-                );
-
-
-            if (!result) {
-
-                throw new Error(
-                    "TSPL data gagal dikirim."
-                );
-
-            }
+            await Bluetooth.write(
+                command
+            );
 
 
             console.log(
-                "TSPL PRINT SENT"
+                "========================================"
+            );
+
+            console.log(
+                "TSPL PRINT SUCCESS"
+            );
+
+            console.log(
+                "========================================"
             );
 
 
@@ -303,16 +382,177 @@ Target:
 
 
         // =================================================
-        // MM → DOT
+        // HEADER
         // =================================================
 
-        mmToDot(mm, dpi) {
+        buildHeader(
+            width,
+            height,
+            dpi,
+            density,
+            speed,
+            gap
+        ) {
 
-            return Math.round(
-                Number(mm) *
-                Number(dpi) /
-                25.4
-            );
+            /*
+            -------------------------------------------------
+            TSPL menggunakan satuan mm pada SIZE.
+
+            pixel → mm
+
+            mm = pixel / dpi * 25.4
+            -------------------------------------------------
+            */
+
+
+            const widthMM =
+                (
+                    width /
+                    dpi *
+                    25.4
+                ).toFixed(2);
+
+
+            const heightMM =
+                (
+                    height /
+                    dpi *
+                    25.4
+                ).toFixed(2);
+
+
+            const gapMM =
+                Number.isFinite(
+                    gap
+                )
+                    ? gap
+                    : 2;
+
+
+            let command = "";
+
+
+            command +=
+                "SIZE " +
+                widthMM +
+                " mm," +
+                heightMM +
+                " mm\r\n";
+
+
+            command +=
+                "GAP " +
+                gapMM +
+                " mm,0 mm\r\n";
+
+
+            command +=
+                "DIRECTION 1\r\n";
+
+
+            command +=
+                "REFERENCE 0,0\r\n";
+
+
+            command +=
+                "OFFSET 0 mm\r\n";
+
+
+            command +=
+                "CLS\r\n";
+
+
+            /*
+            -------------------------------------------------
+            DENSITY
+            -------------------------------------------------
+            */
+
+            if (
+                Number.isFinite(
+                    density
+                )
+            ) {
+
+                const safeDensity =
+                    Math.max(
+                        0,
+                        Math.min(
+                            15,
+                            Math.round(
+                                density
+                            )
+                        )
+                    );
+
+
+                command +=
+                    "DENSITY " +
+                    safeDensity +
+                    "\r\n";
+
+            }
+
+
+            /*
+            -------------------------------------------------
+            SPEED
+            -------------------------------------------------
+            */
+
+            if (
+                Number.isFinite(
+                    speed
+                )
+            ) {
+
+                const safeSpeed =
+                    Math.max(
+                        1,
+                        Math.min(
+                            12,
+                            Number(speed)
+                        )
+                    );
+
+
+                command +=
+                    "SPEED " +
+                    safeSpeed +
+                    "\r\n";
+
+            }
+
+
+            /*
+            -------------------------------------------------
+            BITMAP HEADER
+
+            x = 0
+            y = 0
+
+            width = byte width
+            height = pixel height
+
+            mode = 0
+            -------------------------------------------------
+            */
+
+            const bitmapWidthBytes =
+                Math.ceil(
+                    width / 8
+                );
+
+
+            command +=
+                "BITMAP 0,0," +
+                bitmapWidthBytes +
+                "," +
+                height +
+                ",0,";
+
+
+            return command;
 
         },
 
@@ -328,27 +568,41 @@ Target:
         ) {
 
             /*
-            =============================================
-            Temporary Canvas
-            =============================================
+            -------------------------------------------------
+            SOURCE
+            -------------------------------------------------
             */
 
-            const tempCanvas =
+            const sourceWidth =
+                canvas.width;
+
+
+            const sourceHeight =
+                canvas.height;
+
+
+            /*
+            -------------------------------------------------
+            CREATE WORK CANVAS
+            -------------------------------------------------
+            */
+
+            const workCanvas =
                 document.createElement(
                     "canvas"
                 );
 
 
-            tempCanvas.width =
+            workCanvas.width =
                 targetWidth;
 
 
-            tempCanvas.height =
+            workCanvas.height =
                 targetHeight;
 
 
             const ctx =
-                tempCanvas.getContext(
+                workCanvas.getContext(
                     "2d",
                     {
                         willReadFrequently: true
@@ -357,10 +611,25 @@ Target:
 
 
             /*
-            =============================================
-            WHITE BACKGROUND
-            =============================================
+            =================================================
+            IMPORTANT FIX #1
+
+            SELALU BACKGROUND PUTIH
+
+            Jika canvas asli transparan,
+            alpha 0 jangan sampai menjadi hitam.
+
+            Ini salah satu penyebab paling umum
+            hasil thermal menjadi blok hitam.
+            =================================================
             */
+
+            ctx.save();
+
+
+            ctx.globalCompositeOperation =
+                "source-over";
+
 
             ctx.fillStyle =
                 "#FFFFFF";
@@ -375,10 +644,18 @@ Target:
 
 
             /*
-            =============================================
+            -------------------------------------------------
             DRAW SOURCE
-            =============================================
+            -------------------------------------------------
             */
+
+            ctx.imageSmoothingEnabled =
+                true;
+
+
+            ctx.imageSmoothingQuality =
+                "high";
+
 
             ctx.drawImage(
 
@@ -386,8 +663,8 @@ Target:
 
                 0,
                 0,
-                canvas.width,
-                canvas.height,
+                sourceWidth,
+                sourceHeight,
 
                 0,
                 0,
@@ -397,10 +674,13 @@ Target:
             );
 
 
+            ctx.restore();
+
+
             /*
-            =============================================
-            IMAGE DATA
-            =============================================
+            =================================================
+            READ PIXELS
+            =================================================
             */
 
             const imageData =
@@ -412,22 +692,21 @@ Target:
                 );
 
 
-            const data =
+            const pixels =
                 imageData.data;
 
 
             /*
-            =============================================
-            TSPL BITMAP
+            =================================================
+            BITMAP
 
             1 bit per pixel
 
-            Black = 1
-            White = 0
-            =============================================
+            8 pixel = 1 byte
+            =================================================
             */
 
-            const bytesPerRow =
+            const byteWidth =
                 Math.ceil(
                     targetWidth / 8
                 );
@@ -435,87 +714,195 @@ Target:
 
             const bitmap =
                 new Uint8Array(
-                    bytesPerRow *
+                    byteWidth *
                     targetHeight
                 );
 
 
+            /*
+            =================================================
+            THRESHOLD / DITHER
+            =================================================
+            */
+
+            if (
+                this.dithering
+            ) {
+
+                this.renderDither(
+                    pixels,
+                    bitmap,
+                    targetWidth,
+                    targetHeight,
+                    byteWidth
+                );
+
+            }
+
+            else {
+
+                this.renderThreshold(
+                    pixels,
+                    bitmap,
+                    targetWidth,
+                    targetHeight,
+                    byteWidth
+                );
+
+            }
+
+
+            return {
+
+                width:
+                    targetWidth,
+
+                height:
+                    targetHeight,
+
+                byteWidth:
+                    byteWidth,
+
+                data:
+                    bitmap
+
+            };
+
+        },
+
+
+        // =================================================
+        // THRESHOLD
+        // =================================================
+
+        renderThreshold(
+            pixels,
+            bitmap,
+            width,
+            height,
+            byteWidth
+        ) {
+
+            const threshold =
+                Number(
+                    this.threshold
+                ) || 185;
+
+
+            /*
+            -------------------------------------------------
+            BLACK PIXEL
+
+            grayscale < threshold
+
+            WHITE PIXEL
+
+            grayscale >= threshold
+            -------------------------------------------------
+            */
+
+
             for (
                 let y = 0;
-                y < targetHeight;
+                y < height;
                 y++
             ) {
 
                 for (
                     let x = 0;
-                    x < targetWidth;
+                    x < width;
                     x++
                 ) {
 
                     const index =
                         (
                             y *
-                            targetWidth +
+                            width +
                             x
                         ) * 4;
 
 
                     const r =
-                        data[index];
+                        pixels[index];
 
 
                     const g =
-                        data[index + 1];
+                        pixels[index + 1];
 
 
                     const b =
-                        data[index + 2];
+                        pixels[index + 2];
 
 
                     const a =
-                        data[index + 3];
+                        pixels[index + 3];
 
 
                     /*
-                    -------------------------------------
-                    Alpha
-                    -------------------------------------
+                    =========================================
+                    IMPORTANT FIX #2
+
+                    Alpha transparan dianggap PUTIH.
+
+                    BUKAN HITAM.
+                    =========================================
                     */
 
-                    if (a < 128) {
+                    let gray;
 
-                        continue;
+
+                    if (
+                        a < 10
+                    ) {
+
+                        gray =
+                            255;
+
+                    }
+
+                    else {
+
+                        gray =
+                            (
+                                0.299 * r +
+                                0.587 * g +
+                                0.114 * b
+                            );
 
                     }
 
 
                     /*
-                    -------------------------------------
-                    Grayscale
-                    -------------------------------------
-                    */
-
-                    const gray =
-                        (
-                            r * 299 +
-                            g * 587 +
-                            b * 114
-                        ) / 1000;
-
-
-                    /*
-                    -------------------------------------
-                    Threshold
-                    -------------------------------------
+                    -------------------------------------------------
+                    INVERT OPTIONAL
+                    -------------------------------------------------
                     */
 
                     if (
-                        gray < 128
+                        this.invert
+                    ) {
+
+                        gray =
+                            255 -
+                            gray;
+
+                    }
+
+
+                    /*
+                    -------------------------------------------------
+                    BLACK
+                    -------------------------------------------------
+                    */
+
+                    if (
+                        gray <
+                        threshold
                     ) {
 
                         const byteIndex =
                             y *
-                            bytesPerRow +
+                            byteWidth +
                             Math.floor(
                                 x / 8
                             );
@@ -524,7 +911,8 @@ Target:
                         const bit =
                             7 -
                             (
-                                x % 8
+                                x %
+                                8
                             );
 
 
@@ -532,7 +920,8 @@ Target:
                             byteIndex
                         ] |=
                             (
-                                1 << bit
+                                1 <<
+                                bit
                             );
 
                     }
@@ -541,192 +930,441 @@ Target:
 
             }
 
+        },
 
-            return {
 
-                data:
-                    bitmap,
+        // =================================================
+        // FLOYD STEINBERG DITHER
+        // =================================================
 
-                width:
-                    targetWidth,
+        renderDither(
+            pixels,
+            bitmap,
+            width,
+            height,
+            byteWidth
+        ) {
 
-                height:
-                    targetHeight,
+            const threshold =
+                Number(
+                    this.threshold
+                ) || 185;
 
-                bytesPerRow:
-                    bytesPerRow
 
-            };
+            /*
+            -------------------------------------------------
+            GRAYSCALE BUFFER
+            -------------------------------------------------
+            */
+
+            const gray =
+                new Float32Array(
+                    width *
+                    height
+                );
+
+
+            for (
+                let y = 0;
+                y < height;
+                y++
+            ) {
+
+                for (
+                    let x = 0;
+                    x < width;
+                    x++
+                ) {
+
+                    const i =
+                        (
+                            y *
+                            width +
+                            x
+                        ) * 4;
+
+
+                    const r =
+                        pixels[i];
+
+
+                    const g =
+                        pixels[i + 1];
+
+
+                    const b =
+                        pixels[i + 2];
+
+
+                    const a =
+                        pixels[i + 3];
+
+
+                    if (
+                        a < 10
+                    ) {
+
+                        gray[
+                            y * width + x
+                        ] = 255;
+
+                    }
+
+                    else {
+
+                        gray[
+                            y * width + x
+                        ] =
+                            0.299 * r +
+                            0.587 * g +
+                            0.114 * b;
+
+                    }
+
+                }
+
+            }
+
+
+            /*
+            -------------------------------------------------
+            DITHER
+            -------------------------------------------------
+            */
+
+            for (
+                let y = 0;
+                y < height;
+                y++
+            ) {
+
+                for (
+                    let x = 0;
+                    x < width;
+                    x++
+                ) {
+
+                    const index =
+                        y *
+                        width +
+                        x;
+
+
+                    let oldPixel =
+                        gray[index];
+
+
+                    const newPixel =
+                        oldPixel <
+                        threshold
+                            ? 0
+                            : 255;
+
+
+                    const error =
+                        oldPixel -
+                        newPixel;
+
+
+                    /*
+                    -------------------------------------------------
+                    SAVE BLACK PIXEL
+                    -------------------------------------------------
+                    */
+
+                    if (
+                        newPixel === 0
+                    ) {
+
+                        const byteIndex =
+                            y *
+                            byteWidth +
+                            Math.floor(
+                                x / 8
+                            );
+
+
+                        const bit =
+                            7 -
+                            (
+                                x %
+                                8
+                            );
+
+
+                        bitmap[
+                            byteIndex
+                        ] |=
+                            (
+                                1 <<
+                                bit
+                            );
+
+                    }
+
+
+                    /*
+                    -------------------------------------------------
+                    DISTRIBUTE ERROR
+                    -------------------------------------------------
+                    */
+
+                    if (
+                        x + 1 <
+                        width
+                    ) {
+
+                        gray[
+                            index + 1
+                        ] +=
+                            error *
+                            7 /
+                            16;
+
+                    }
+
+
+                    if (
+                        x > 0 &&
+                        y + 1 < height
+                    ) {
+
+                        gray[
+                            index +
+                            width -
+                            1
+                        ] +=
+                            error *
+                            3 /
+                            16;
+
+                    }
+
+
+                    if (
+                        y + 1 <
+                        height
+                    ) {
+
+                        gray[
+                            index +
+                            width
+                        ] +=
+                            error *
+                            5 /
+                            16;
+
+                    }
+
+
+                    if (
+                        x + 1 <
+                        width &&
+                        y + 1 <
+                        height
+                    ) {
+
+                        gray[
+                            index +
+                            width +
+                            1
+                        ] +=
+                            error *
+                            1 /
+                            16;
+
+                    }
+
+                }
+
+            }
 
         },
 
 
         // =================================================
-        // BUILD TSPL COMMAND
+        // WIDTH
         // =================================================
 
-        buildCommand(options) {
+        resolveWidth(
+            canvas,
+            printerWidth,
+            dpi,
+            labelWidth
+        ) {
 
-            const {
+            /*
+            -------------------------------------------------
+            PRIORITAS:
 
-                widthMM,
+            1. canvas.width
 
-                heightMM,
+            Karena Preview biasanya sudah dalam
+            ukuran pixel printer.
 
-                gapMM,
+            2. paperWidth
+            -------------------------------------------------
+            */
 
-                widthDot,
-
-                heightDot,
-
-                bitmap,
-
-                printer
-
-            } = options;
-
-
-            let tspl = "";
-
-
-            // =============================================
-            // SIZE
-            // =============================================
-
-            tspl +=
-                `SIZE ${this.cleanNumber(widthMM)} mm,${this.cleanNumber(heightMM)} mm\n`;
-
-
-            // =============================================
-            // GAP
-            // =============================================
-
-            tspl +=
-                `GAP ${this.cleanNumber(gapMM)} mm,0\n`;
-
-
-            // =============================================
-            // SPEED
-            // =============================================
 
             if (
-                printer &&
-                printer.speed
+                canvas.width >
+                0
             ) {
 
-                tspl +=
-                    `SPEED ${Number(printer.speed)}\n`;
+                return Math.round(
+                    canvas.width
+                );
 
             }
 
 
-            // =============================================
-            // DENSITY
-            // =============================================
-
             if (
-                printer &&
-                printer.density !==
-                undefined
+                labelWidth &&
+                dpi
             ) {
 
-                tspl +=
-                    `DENSITY ${Number(printer.density)}\n`;
+                return Math.round(
+                    (
+                        labelWidth /
+                        25.4
+                    ) *
+                    dpi
+                );
 
             }
 
 
-            // =============================================
-            // CLS
-            // =============================================
+            return Math.round(
+                printerWidth
+            );
 
-            tspl +=
-                "CLS\n";
-
-
-            // =============================================
-            // BITMAP
-            // =============================================
-
-            tspl +=
-                `BITMAP 0,0,${bitmap.bytesPerRow},${heightDot},0,`;
+        },
 
 
-            /*
-            =============================================
-            BITMAP DATA
+        // =================================================
+        // HEIGHT
+        // =================================================
 
-            TSPL BITMAP expects binary data.
+        resolveHeight(
+            canvas,
+            printerHeight,
+            dpi,
+            labelHeight
+        ) {
 
-            Header is ASCII.
-            Bitmap itself must be raw bytes.
-            =============================================
-            */
+            if (
+                canvas.height >
+                0
+            ) {
 
-            const header =
-                new TextEncoder().encode(
-                    tspl
+                return Math.round(
+                    canvas.height
                 );
 
-
-            const bitmapData =
-                bitmap.data;
+            }
 
 
-            // =============================================
-            // PRINT
-            // =============================================
+            if (
+                labelHeight &&
+                dpi
+            ) {
 
-            const copies =
-                Math.max(
-                    1,
-                    Number(
-                        printer.copies
-                    ) || 1
+                return Math.round(
+                    (
+                        labelHeight /
+                        25.4
+                    ) *
+                    dpi
                 );
 
+            }
 
-            const printCommand =
-                new TextEncoder().encode(
-                    `\nPRINT ${copies}\n`
+
+            return Math.round(
+                printerHeight
+            );
+
+        },
+
+
+        // =================================================
+        // TEXT → UINT8
+        // =================================================
+
+        textToBytes(text) {
+
+            return new TextEncoder()
+                .encode(
+                    text
                 );
 
+        },
 
-            /*
-            =============================================
-            COMBINE
-            =============================================
-            */
+
+        // =================================================
+        // CONCAT
+        // =================================================
+
+        concatUint8Arrays(
+            arrays
+        ) {
+
+            let total =
+                0;
+
+
+            for (
+                const array
+                of arrays
+            ) {
+
+                if (
+                    array
+                ) {
+
+                    total +=
+                        array.length;
+
+                }
+
+            }
+
 
             const result =
                 new Uint8Array(
-
-                    header.length +
-                    bitmapData.length +
-                    printCommand.length
-
+                    total
                 );
 
 
-            result.set(
-                header,
-                0
-            );
+            let offset =
+                0;
 
 
-            result.set(
-                bitmapData,
-                header.length
-            );
+            for (
+                const array
+                of arrays
+            ) {
+
+                if (
+                    !array
+                ) {
+
+                    continue;
+
+                }
 
 
-            result.set(
-                printCommand,
+                result.set(
+                    array,
+                    offset
+                );
 
-                header.length +
-                bitmapData.length
 
-            );
+                offset +=
+                    array.length;
+
+            }
 
 
             return result;
@@ -735,122 +1373,75 @@ Target:
 
 
         // =================================================
-        // TEST PRINT
+        // SETTINGS
         // =================================================
 
-        async testPrint() {
-
-            if (
-                typeof Bluetooth ===
-                "undefined"
-            ) {
-
-                throw new Error(
-                    "Bluetooth Engine tidak ditemukan."
-                );
-
-            }
-
-
-            if (
-                !Bluetooth.isConnected()
-            ) {
-
-                throw new Error(
-                    "Printer belum terhubung."
-                );
-
-            }
-
-
-            const command =
-
-                `SIZE 58 mm,40 mm
-GAP 3 mm,0
-CLS
-TEXT 50,50,"3",0,1,1,"SMARTPRINT"
-BARCODE 50,100,"128",80,1,0,2,2,"123456"
-PRINT 1
-`;
-
-
-            await Bluetooth.write(
-                command
-            );
-
-
-            console.log(
-                "TSPL TEST PRINT SENT"
-            );
-
-
-            return true;
-
-        },
-
-
-        // =================================================
-        // RAW COMMAND
-        // =================================================
-
-        async sendRaw(command) {
-
-            if (
-                typeof Bluetooth ===
-                "undefined"
-            ) {
-
-                throw new Error(
-                    "Bluetooth Engine tidak ditemukan."
-                );
-
-            }
-
-
-            if (
-                !Bluetooth.isConnected()
-            ) {
-
-                throw new Error(
-                    "Printer belum terhubung."
-                );
-
-            }
-
-
-            return await Bluetooth.write(
-                command
-            );
-
-        },
-
-
-        // =================================================
-        // CLEAN NUMBER
-        // =================================================
-
-        cleanNumber(value) {
+        setThreshold(value) {
 
             const number =
                 Number(value);
 
 
             if (
-                !Number.isFinite(number)
+                Number.isFinite(
+                    number
+                )
             ) {
 
-                return "0";
+                this.threshold =
+                    Math.max(
+                        0,
+                        Math.min(
+                            255,
+                            Math.round(
+                                number
+                            )
+                        )
+                    );
 
             }
 
 
-            return String(
-                Number(
-                    number.toFixed(2)
-                )
+            console.log(
+                "TSPL Threshold:",
+                this.threshold
+            );
+
+
+        },
+
+
+        setDithering(enabled) {
+
+            this.dithering =
+                Boolean(
+                    enabled
+                );
+
+
+            console.log(
+                "TSPL Dithering:",
+                this.dithering
+            );
+
+        },
+
+
+        setInvert(enabled) {
+
+            this.invert =
+                Boolean(
+                    enabled
+                );
+
+
+            console.log(
+                "TSPL Invert:",
+                this.invert
             );
 
         }
+
 
     };
 
@@ -864,20 +1455,15 @@ PRINT 1
 
 
     // =====================================================
-    // LEGACY
+    // READY
     // =====================================================
 
-    window.testTSPL =
-        function () {
-
-            return TSPL.testPrint();
-
-        };
-
-
     console.log(
-        "SmartPrint TSPL Engine v1.0 Ready"
+        "SmartPrint TSPL Engine v2.0 Ready"
     );
 
+    console.log(
+        "TSPL → Bluetooth v5.0 Compatible"
+    );
 
 })();
