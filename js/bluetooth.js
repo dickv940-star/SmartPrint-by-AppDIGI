@@ -2,48 +2,53 @@
 
 /*
 =====================================================
- SmartPrint Bluetooth Engine v5.0
+ SmartPrint Bluetooth Engine v5.1
 =====================================================
 
  TRANSPORT
  ----------------------------------------------------
- ✓ BLE / Web Bluetooth
- ✓ Bluetooth Classic / SPP via Web Serial COM
- ✓ Bluetooth Classic via Local Bridge
- ✓ Auto reconnect BLE
- ✓ Auto reconnect Bridge
- ✓ Manual user connection
- ✓ Saved printer
- ✓ GATT discovery
- ✓ Write characteristic detection
+ ✓ Web Bluetooth / BLE
+ ✓ Web Serial / Bluetooth Classic COM
+ ✓ Local Bridge / WebSocket
+ ✓ Auto Connect
+ ✓ Manual Connect
+ ✓ Reconnect
+ ✓ Saved Printer
+ ✓ GATT Discovery
+ ✓ Write Characteristic Detection
  ✓ Chunking
- ✓ Delay
- ✓ ESC / TSPL / ZPL / CPCL compatible
- ✓ PrinterManager compatible
- ✓ Legacy connectPrinter() compatible
+ ✓ ESC/POS
+ ✓ TSPL
+ ✓ ZPL
+ ✓ CPCL
+
+ COMPATIBILITY
+ ----------------------------------------------------
+ ✓ PrinterManager v4
+ ✓ Bluetooth.connect()
+ ✓ Bluetooth.connectUser()
+ ✓ Bluetooth.autoConnect()
+ ✓ Bluetooth.isConnected()
+ ✓ Bluetooth.write()
+ ✓ Bluetooth.disconnect()
+ ✓ legacy connectPrinter()
+ ✓ legacy sendTSPL()
+ ✓ legacy disconnectPrinter()
 
  IMPORTANT
  ----------------------------------------------------
- Web Bluetooth
-   → BLE / GATT ONLY
+ BLE:
+   navigator.bluetooth
 
- Bluetooth Classic / SPP
-   Windows
-     → Web Serial / COM
+ Bluetooth Classic:
+   Windows → Web Serial / COM
+   Android → Local Bridge
 
- Android / Classic Bluetooth
-     → SmartPrint Local Bridge
-
- requestDevice()
- requestPort()
-
- HARUS dipanggil dari user gesture.
-
- Auto Connect:
-   → Tidak membuka picker.
-   → Hanya menggunakan saved permission/device.
+ Browser tidak dapat mengakses Bluetooth
+ Classic/SPP langsung melalui navigator.bluetooth.
 =====================================================
 */
+
 
 (function () {
 
@@ -56,7 +61,7 @@
         // CONFIG
         // =================================================
 
-        version: "5.0.0",
+        version: "5.1.0",
 
         mode: "auto",
 
@@ -110,8 +115,6 @@
 
         port: null,
 
-        reader: null,
-
         writer: null,
 
         bridge: null,
@@ -130,45 +133,9 @@
 
         disconnectHandler: null,
 
-        initialized: false,
-
 
         // =================================================
-        // INIT
-        // =================================================
-
-        init() {
-
-            if (this.initialized) {
-
-                return;
-
-            }
-
-            this.initialized = true;
-
-            console.log(
-                "========================================"
-            );
-
-            console.log(
-                "SmartPrint Bluetooth Engine v5.0"
-            );
-
-            console.log(
-                "========================================"
-            );
-
-            console.log(
-                "Capabilities:",
-                this.getCapabilities()
-            );
-
-        },
-
-
-        // =================================================
-        // CAPABILITIES
+        // SUPPORT
         // =================================================
 
         isBluetoothSupported() {
@@ -219,8 +186,19 @@
 
 
         // =================================================
-        // AUTO CONNECT
+        // CONNECT
         // =================================================
+        /*
+         * Koneksi MANUAL.
+         *
+         * Fungsi ini boleh dipanggil dari tombol user.
+         *
+         * Priority:
+         *
+         * 1. BLE
+         * 2. Serial
+         * 3. Bridge
+         */
 
         async connect() {
 
@@ -242,67 +220,164 @@
             );
 
 
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "SMARTPRINT BLUETOOTH ENGINE v5.1"
+            );
+
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "Capabilities:",
+                this.getCapabilities()
+            );
+
+
             try {
 
-                /*
-                =================================================
-                MODE AUTO
-                =================================================
-                */
+                // =================================================
+                // MODE BLE
+                // =================================================
 
-                if (this.mode === "auto") {
+                if (
+                    this.mode === "ble"
+                ) {
 
-                    /*
-                    ---------------------------------------------
-                    1. RESTORE SAVED BLE
-                    ---------------------------------------------
-                    */
+                    return await this.connectBLE();
 
-                    const ble =
-                        await this.autoConnectBLE();
+                }
 
-                    if (ble) {
 
-                        return true;
+                // =================================================
+                // MODE SERIAL
+                // =================================================
+
+                if (
+                    this.mode === "serial"
+                ) {
+
+                    return await this.connectSerial();
+
+                }
+
+
+                // =================================================
+                // MODE BRIDGE
+                // =================================================
+
+                if (
+                    this.mode === "bridge"
+                ) {
+
+                    return await this.connectBridge();
+
+                }
+
+
+                // =================================================
+                // AUTO / DEFAULT
+                // =================================================
+
+                if (
+                    this.mode === "auto"
+                ) {
+
+                    // -------------------------------------------------
+                    // 1. BLE
+                    // -------------------------------------------------
+
+                    if (
+                        this.isBluetoothSupported()
+                    ) {
+
+                        console.log(
+                            "Trying Web Bluetooth BLE..."
+                        );
+
+
+                        const bleResult =
+                            await this.connectBLE();
+
+
+                        if (bleResult) {
+
+                            return true;
+
+                        }
+
+
+                        console.log(
+                            "BLE tidak terhubung."
+                        );
 
                     }
 
 
-                    /*
-                    ---------------------------------------------
-                    2. RESTORE BRIDGE
-                    ---------------------------------------------
-                    */
+                    // -------------------------------------------------
+                    // 2. SERIAL
+                    // -------------------------------------------------
 
-                    const bridge =
-                        await this.autoConnectBridge();
+                    if (
+                        this.isSerialSupported()
+                    ) {
 
-                    if (bridge) {
+                        console.log(
+                            "Trying Web Serial / Bluetooth COM..."
+                        );
 
-                        return true;
+
+                        const serialResult =
+                            await this.connectSerial();
+
+
+                        if (serialResult) {
+
+                            return true;
+
+                        }
+
+
+                        console.log(
+                            "Serial tidak terhubung."
+                        );
 
                     }
 
 
-                    /*
-                    ---------------------------------------------
-                    3. SERIAL
-                    ---------------------------------------------
-                    */
+                    // -------------------------------------------------
+                    // 3. BRIDGE
+                    // -------------------------------------------------
 
-                    /*
-                    Web Serial requestPort()
-                    TIDAK BOLEH otomatis.
+                    if (
+                        this.isBridgeSupported()
+                    ) {
 
-                    User harus memanggil:
+                        console.log(
+                            "Trying SmartPrint Local Bridge..."
+                        );
 
-                    Bluetooth.connectUser()
 
-                    */
+                        const bridgeResult =
+                            await this.connectBridge();
 
-                    console.log(
-                        "Serial menunggu koneksi manual."
-                    );
+
+                        if (bridgeResult) {
+
+                            return true;
+
+                        }
+
+
+                        console.log(
+                            "Bridge tidak terhubung."
+                        );
+
+                    }
 
 
                     this.updateStatus(
@@ -311,37 +386,6 @@
 
 
                     return false;
-
-                }
-
-
-                /*
-                =================================================
-                MANUAL MODE
-                =================================================
-                */
-
-                if (this.mode === "ble") {
-
-                    return await this.connectBLE();
-
-                }
-
-
-                if (this.mode === "serial") {
-
-                    console.warn(
-                        "Serial harus menggunakan connectUser()."
-                    );
-
-                    return false;
-
-                }
-
-
-                if (this.mode === "bridge") {
-
-                    return await this.connectBridge();
 
                 }
 
@@ -361,8 +405,28 @@
                 );
 
 
-                this.handleConnectionError(
-                    error
+                if (
+                    error &&
+                    error.name === "NotFoundError"
+                ) {
+
+                    console.warn(
+                        "Pemilihan perangkat dibatalkan."
+                    );
+
+
+                    this.updateStatus(
+                        "disconnected"
+                    );
+
+
+                    return false;
+
+                }
+
+
+                this.updateStatus(
+                    "error"
                 );
 
 
@@ -372,8 +436,7 @@
 
             finally {
 
-                this.connecting =
-                    false;
+                this.connecting = false;
 
             }
 
@@ -386,161 +449,7 @@
 
         async connectUser() {
 
-            if (this.connecting) {
-
-                console.warn(
-                    "Bluetooth connection sedang berjalan."
-                );
-
-                return false;
-
-            }
-
-
-            this.connecting = true;
-
-            this.updateStatus(
-                "connecting"
-            );
-
-
-            try {
-
-                console.log(
-                    "========================================"
-                );
-
-                console.log(
-                    "SMARTPRINT USER CONNECT v5"
-                );
-
-                console.log(
-                    "========================================"
-                );
-
-
-                /*
-                =================================================
-                1. BLE
-                =================================================
-                */
-
-                if (
-                    this.isBluetoothSupported()
-                ) {
-
-                    console.log(
-                        "User Connect → BLE"
-                    );
-
-
-                    const ble =
-                        await this.connectBLE();
-
-
-                    if (ble) {
-
-                        this.saveDevice();
-
-                        return true;
-
-                    }
-
-                }
-
-
-                /*
-                =================================================
-                2. SERIAL
-                =================================================
-                */
-
-                if (
-                    this.isSerialSupported()
-                ) {
-
-                    console.log(
-                        "User Connect → Serial / COM"
-                    );
-
-
-                    const serial =
-                        await this.connectSerial();
-
-
-                    if (serial) {
-
-                        this.saveDevice();
-
-                        return true;
-
-                    }
-
-                }
-
-
-                /*
-                =================================================
-                3. BRIDGE
-                =================================================
-                */
-
-                if (
-                    this.isBridgeSupported()
-                ) {
-
-                    console.log(
-                        "User Connect → Local Bridge"
-                    );
-
-
-                    const bridge =
-                        await this.connectBridge();
-
-
-                    if (bridge) {
-
-                        this.saveDevice();
-
-                        return true;
-
-                    }
-
-                }
-
-
-                this.updateStatus(
-                    "disconnected"
-                );
-
-
-                return false;
-
-            }
-
-            catch (error) {
-
-                console.error(
-                    "User Connect Error:",
-                    error
-                );
-
-
-                this.handleConnectionError(
-                    error
-                );
-
-
-                return false;
-
-            }
-
-            finally {
-
-                this.connecting =
-                    false;
-
-            }
+            return this.connect();
 
         },
 
@@ -572,7 +481,8 @@
                 device =
                     await navigator.bluetooth.requestDevice({
 
-                        acceptAllDevices: true,
+                        acceptAllDevices:
+                            true,
 
                         optionalServices:
                             this.services
@@ -589,11 +499,7 @@
                 ) {
 
                     console.warn(
-                        "BLE picker dibatalkan."
-                    );
-
-                    this.updateStatus(
-                        "disconnected"
+                        "BLE device picker dibatalkan."
                     );
 
                     return false;
@@ -611,6 +517,12 @@
                 return false;
 
             }
+
+
+            console.log(
+                "BLE Device:",
+                device.name || "Unknown"
+            );
 
 
             this.removeDisconnectListener();
@@ -659,188 +571,7 @@
 
 
         // =================================================
-        // BLE AUTO CONNECT
-        // =================================================
-
-        async autoConnectBLE() {
-
-            if (
-                !this.isBluetoothSupported()
-            ) {
-
-                return false;
-
-            }
-
-
-            if (
-                typeof navigator.bluetooth.getDevices !==
-                "function"
-            ) {
-
-                return false;
-
-            }
-
-
-            const savedTransport =
-                this.getSaved(
-                    "SMARTPRINT_PRINTER_TRANSPORT"
-                );
-
-
-            if (
-                savedTransport &&
-                savedTransport !== "ble"
-            ) {
-
-                return false;
-
-            }
-
-
-            try {
-
-                const devices =
-                    await navigator.bluetooth.getDevices();
-
-
-                if (
-                    !devices ||
-                    !devices.length
-                ) {
-
-                    return false;
-
-                }
-
-
-                const savedID =
-                    this.getSaved(
-                        "SMARTPRINT_PRINTER_ID"
-                    );
-
-
-                const savedName =
-                    this.getSaved(
-                        "SMARTPRINT_PRINTER_NAME"
-                    );
-
-
-                let device = null;
-
-
-                /*
-                ---------------------------------------------
-                PRIORITAS ID
-                ---------------------------------------------
-                */
-
-                if (savedID) {
-
-                    device =
-                        devices.find(
-                            item =>
-                                item.id === savedID
-                        );
-
-                }
-
-
-                /*
-                ---------------------------------------------
-                FALLBACK NAME
-                ---------------------------------------------
-                */
-
-                if (
-                    !device &&
-                    savedName
-                ) {
-
-                    device =
-                        devices.find(
-                            item =>
-                                item.name === savedName
-                        );
-
-                }
-
-
-                if (!device) {
-
-                    return false;
-
-                }
-
-
-                console.log(
-                    "BLE Saved Device:",
-                    device.name
-                );
-
-
-                this.device =
-                    device;
-
-
-                this.deviceName =
-                    device.name ||
-                    "BLE Printer";
-
-
-                this.transport =
-                    "ble";
-
-
-                this.removeDisconnectListener();
-
-                this.attachDisconnectEvent();
-
-
-                await this.connectGATT();
-
-
-                this.connected =
-                    true;
-
-
-                this.updateStatus(
-                    "connected"
-                );
-
-
-                console.log(
-                    "BLE Auto Connected:",
-                    this.deviceName
-                );
-
-
-                return true;
-
-            }
-
-            catch (error) {
-
-                console.warn(
-                    "BLE Auto Connect gagal:",
-                    error
-                );
-
-
-                this.connected =
-                    false;
-
-
-                return false;
-
-            }
-
-        },
-
-
-        // =================================================
-        // GATT CONNECT
+        // GATT
         // =================================================
 
         async connectGATT() {
@@ -897,11 +628,9 @@
                 null;
 
 
-            /*
-            =================================================
-            SERVICE DISCOVERY
-            =================================================
-            */
+            // =================================================
+            // SEARCH WRITE CHARACTERISTIC
+            // =================================================
 
             for (
                 const service of services
@@ -940,16 +669,14 @@
                     of characteristics
                 ) {
 
-                    console.log(
-                        "CHARACTERISTIC:",
-                        characteristic.uuid,
-                        characteristic.properties
-                    );
+                    const properties =
+                        characteristic.properties ||
+                        {};
 
 
                     const canWrite =
-                        characteristic.properties.write ||
-                        characteristic.properties.writeWithoutResponse;
+                        properties.write ||
+                        properties.writeWithoutResponse;
 
 
                     if (!canWrite) {
@@ -959,11 +686,16 @@
                     }
 
 
-                    /*
-                    -----------------------------------------
-                    PRIORITAS CHARACTERISTIC DIKENAL
-                    -----------------------------------------
-                    */
+                    console.log(
+                        "CHARACTERISTIC:",
+                        characteristic.uuid,
+                        properties
+                    );
+
+
+                    // -------------------------------------------------
+                    // PRIORITAS CHARACTERISTIC YANG DIKENAL
+                    // -------------------------------------------------
 
                     if (
                         this.characteristics.includes(
@@ -979,11 +711,9 @@
                     }
 
 
-                    /*
-                    -----------------------------------------
-                    FALLBACK
-                    -----------------------------------------
-                    */
+                    // -------------------------------------------------
+                    // FALLBACK
+                    // -------------------------------------------------
 
                     if (
                         !this.writeCharacteristic
@@ -1055,10 +785,9 @@
             try {
 
                 /*
-                IMPORTANT:
-                requestPort harus dipanggil
-                langsung dari user gesture.
-                */
+                 * requestPort HARUS berasal dari
+                 * user gesture.
+                 */
 
                 port =
                     await navigator.serial.requestPort();
@@ -1073,11 +802,7 @@
                 ) {
 
                     console.warn(
-                        "Serial picker dibatalkan."
-                    );
-
-                    this.updateStatus(
-                        "disconnected"
+                        "Serial device picker dibatalkan."
                     );
 
                     return false;
@@ -1128,8 +853,10 @@
 
                 await port.close();
 
+
                 this.port =
                     null;
+
 
                 throw new Error(
                     "Serial writer tidak tersedia."
@@ -1148,6 +875,9 @@
 
             this.connected =
                 true;
+
+
+            this.saveDevice();
 
 
             this.updateStatus(
@@ -1182,39 +912,10 @@
             }
 
 
-            /*
-            Jangan membuka bridge kedua
-            jika sudah connected.
-            */
-
-            if (
-                this.bridge &&
-                this.bridge.readyState ===
-                WebSocket.OPEN
-            ) {
-
-                this.bridgeConnected =
-                    true;
-
-                this.connected =
-                    true;
-
-                this.transport =
-                    "bridge";
-
-                return true;
-
-            }
-
-
-            if (!silent) {
-
-                console.log(
-                    "Connecting SmartPrint Bridge:",
-                    this.bridgeURL
-                );
-
-            }
+            console.log(
+                "Connecting SmartPrint Bridge:",
+                this.bridgeURL
+            );
 
 
             return new Promise(
@@ -1223,11 +924,8 @@
                     let finished =
                         false;
 
-                    let socket =
-                        null;
 
-                    let timeout =
-                        null;
+                    let socket;
 
 
                     const finish =
@@ -1242,15 +940,6 @@
 
                             finished =
                                 true;
-
-
-                            if (timeout) {
-
-                                clearTimeout(
-                                    timeout
-                                );
-
-                            }
 
 
                             resolve(
@@ -1280,7 +969,9 @@
 
                         }
 
+
                         finish(false);
+
 
                         return;
 
@@ -1291,7 +982,7 @@
                         "arraybuffer";
 
 
-                    timeout =
+                    const timeout =
                         setTimeout(
                             () => {
 
@@ -1307,7 +998,7 @@
                                 if (!silent) {
 
                                     console.warn(
-                                        "SmartPrint Bridge timeout."
+                                        "SmartPrint Bridge tidak tersedia."
                                     );
 
                                 }
@@ -1323,8 +1014,8 @@
                     socket.onopen =
                         () => {
 
-                            console.log(
-                                "SmartPrint Bridge Connected."
+                            clearTimeout(
+                                timeout
                             );
 
 
@@ -1348,12 +1039,17 @@
                                 true;
 
 
+                            this.saveDevice();
+
+
                             this.updateStatus(
                                 "connected"
                             );
 
 
-                            this.saveDevice();
+                            console.log(
+                                "SmartPrint Bridge Connected."
+                            );
 
 
                             finish(true);
@@ -1364,9 +1060,14 @@
                     socket.onerror =
                         error => {
 
+                            clearTimeout(
+                                timeout
+                            );
+
+
                             if (!silent) {
 
-                                console.warn(
+                                console.error(
                                     "Bridge Error:",
                                     error
                                 );
@@ -1384,17 +1085,6 @@
 
                             this.bridgeConnected =
                                 false;
-
-
-                            if (
-                                this.bridge ===
-                                socket
-                            ) {
-
-                                this.bridge =
-                                    null;
-
-                            }
 
 
                             if (
@@ -1421,93 +1111,135 @@
 
 
         // =================================================
-        // BRIDGE AUTO CONNECT
+        // AUTO CONNECT
         // =================================================
+        /*
+         * PENTING:
+         *
+         * Fungsi ini TIDAK boleh memanggil
+         * navigator.bluetooth.requestDevice()
+         * atau navigator.serial.requestPort()
+         *
+         * karena browser membutuhkan user gesture.
+         */
 
-        async autoConnectBridge() {
+        async autoConnect() {
 
-            if (
-                !this.isBridgeSupported()
-            ) {
-
-                return false;
-
-            }
+            console.log(
+                "SmartPrint Bluetooth Auto Connect..."
+            );
 
 
-            const savedTransport =
-                this.getSaved(
-                    "SMARTPRINT_PRINTER_TRANSPORT"
-                );
-
-
-            if (
-                savedTransport !== "bridge"
-            ) {
-
-                return false;
-
-            }
+            let savedTransport =
+                null;
 
 
             try {
 
-                return await this.connectBridge(
-                    true
-                );
+                savedTransport =
+                    localStorage.getItem(
+                        "SMARTPRINT_PRINTER_TRANSPORT"
+                    );
 
             }
 
             catch (error) {
 
                 console.warn(
-                    "Bridge Auto Connect gagal:",
+                    "Tidak dapat membaca saved transport.",
                     error
                 );
 
-                return false;
-
-            }
-
-        },
-
-
-        // =================================================
-        // RECONNECT
-        // =================================================
-
-        async reconnect() {
-
-            if (this.connecting) {
-
-                return false;
-
             }
 
 
-            this.connecting =
-                true;
+            // =================================================
+            // BLE AUTO CONNECT
+            // =================================================
+
+            if (
+                savedTransport === "ble" &&
+                this.isBluetoothSupported() &&
+                typeof navigator.bluetooth.getDevices ===
+                "function"
+            ) {
+
+                try {
+
+                    const devices =
+                        await navigator.bluetooth.getDevices();
 
 
-            this.updateStatus(
-                "connecting"
-            );
+                    const savedId =
+                        localStorage.getItem(
+                            "SMARTPRINT_PRINTER_ID"
+                        );
 
 
-            try {
+                    const savedName =
+                        localStorage.getItem(
+                            "SMARTPRINT_PRINTER_NAME"
+                        );
 
-                /*
-                =================================================
-                BLE
-                =================================================
-                */
 
-                if (
-                    this.transport === "ble" &&
-                    this.device
-                ) {
+                    let device =
+                        null;
 
-                    try {
+
+                    if (savedId) {
+
+                        device =
+                            devices.find(
+                                item =>
+                                    item.id ===
+                                    savedId
+                            );
+
+                    }
+
+
+                    if (
+                        !device &&
+                        savedName
+                    ) {
+
+                        device =
+                            devices.find(
+                                item =>
+                                    item.name ===
+                                    savedName
+                            );
+
+                    }
+
+
+                    if (device) {
+
+                        console.log(
+                            "BLE Saved Device:",
+                            device.name ||
+                            "Unknown"
+                        );
+
+
+                        this.device =
+                            device;
+
+
+                        this.deviceName =
+                            device.name ||
+                            "BLE Printer";
+
+
+                        this.transport =
+                            "ble";
+
+
+                        this.removeDisconnectListener();
+
+
+                        this.attachDisconnectEvent();
+
 
                         await this.connectGATT();
 
@@ -1521,59 +1253,194 @@
                         );
 
 
+                        console.log(
+                            "BLE Auto Connected:",
+                            this.getDeviceName()
+                        );
+
+
                         return true;
 
                     }
 
-                    catch (error) {
+                }
 
-                        console.warn(
-                            "BLE reconnect gagal:",
-                            error
+                catch (error) {
+
+                    console.warn(
+                        "BLE Auto Connect gagal:",
+                        error
+                    );
+
+
+                    this.resetConnectionState();
+
+                }
+
+            }
+
+
+            // =================================================
+            // BRIDGE AUTO CONNECT
+            // =================================================
+
+            if (
+                savedTransport === "bridge"
+            ) {
+
+                try {
+
+                    const result =
+                        await this.connectBridge(
+                            true
                         );
+
+
+                    if (result) {
+
+                        console.log(
+                            "Bridge Auto Connected."
+                        );
+
+
+                        return true;
 
                     }
 
                 }
 
+                catch (error) {
 
-                /*
-                =================================================
-                BRIDGE
-                =================================================
-                */
-
-                if (
-                    this.transport === "bridge"
-                ) {
-
-                    return await this.connectBridge(
-                        true
+                    console.warn(
+                        "Bridge Auto Connect gagal:",
+                        error
                     );
 
                 }
 
-
-                /*
-                =================================================
-                SAVED TRANSPORT
-                =================================================
-                */
-
-                const result =
-                    await this.connect();
+            }
 
 
-                return result;
+            // =================================================
+            // SERIAL
+            // =================================================
+
+            if (
+                savedTransport === "serial"
+            ) {
+
+                console.log(
+                    "Saved Bluetooth Classic printer ditemukan."
+                );
+
+
+                console.log(
+                    "Serial Auto Connect dilewati."
+                );
+
+
+                console.log(
+                    "Menunggu tombol Connect manual."
+                );
 
             }
 
-            finally {
 
-                this.connecting =
-                    false;
+            this.connected =
+                false;
+
+
+            this.updateStatus(
+                "disconnected"
+            );
+
+
+            return false;
+
+        },
+
+
+        // =================================================
+        // RECONNECT
+        // =================================================
+
+        async reconnect() {
+
+            if (
+                this.transport === "ble" &&
+                this.device
+            ) {
+
+                try {
+
+                    this.connecting =
+                        true;
+
+
+                    this.updateStatus(
+                        "connecting"
+                    );
+
+
+                    await this.connectGATT();
+
+
+                    this.connected =
+                        true;
+
+
+                    this.updateStatus(
+                        "connected"
+                    );
+
+
+                    return true;
+
+                }
+
+                catch (error) {
+
+                    console.warn(
+                        "BLE reconnect gagal:",
+                        error
+                    );
+
+                }
+
+                finally {
+
+                    this.connecting =
+                        false;
+
+                }
 
             }
+
+
+            if (
+                this.transport === "bridge"
+            ) {
+
+                return this.connectBridge();
+
+            }
+
+
+            if (
+                this.transport === "serial"
+            ) {
+
+                console.warn(
+                    "Serial reconnect membutuhkan pemilihan COM."
+                );
+
+
+                return false;
+
+            }
+
+
+            return false;
 
         },
 
@@ -1584,92 +1451,94 @@
 
         isConnected() {
 
-            /*
-            ---------------------------------------------
-            BLE
-            ---------------------------------------------
-            */
+            // =================================================
+            // GLOBAL
+            // =================================================
+
+            if (!this.connected) {
+
+                return false;
+
+            }
+
+
+            // =================================================
+            // BLE
+            // =================================================
 
             if (
                 this.transport === "ble"
             ) {
 
-                const state =
-                    !!(
-                        this.connected &&
-                        this.device &&
-                        this.device.gatt &&
-                        this.device.gatt.connected &&
-                        this.writeCharacteristic
-                    );
+                if (
+                    !this.device ||
+                    !this.device.gatt ||
+                    !this.device.gatt.connected ||
+                    !this.writeCharacteristic
+                ) {
+
+                    this.connected =
+                        false;
 
 
-                this.connected =
-                    state;
+                    return false;
 
-
-                return state;
+                }
 
             }
 
 
-            /*
-            ---------------------------------------------
-            SERIAL
-            ---------------------------------------------
-            */
+            // =================================================
+            // SERIAL
+            // =================================================
 
             if (
                 this.transport === "serial"
             ) {
 
-                const state =
-                    !!(
-                        this.connected &&
-                        this.port &&
-                        this.port.writable &&
-                        this.writer
-                    );
+                if (
+                    !this.port ||
+                    !this.port.writable ||
+                    !this.writer
+                ) {
+
+                    this.connected =
+                        false;
 
 
-                this.connected =
-                    state;
+                    return false;
 
-
-                return state;
+                }
 
             }
 
 
-            /*
-            ---------------------------------------------
-            BRIDGE
-            ---------------------------------------------
-            */
+            // =================================================
+            // BRIDGE
+            // =================================================
 
             if (
                 this.transport === "bridge"
             ) {
 
-                const state =
-                    !!(
-                        this.connected &&
-                        this.bridge &&
-                        this.bridge.readyState ===
-                        WebSocket.OPEN
-                    );
+                if (
+                    !this.bridge ||
+                    this.bridge.readyState !==
+                    WebSocket.OPEN
+                ) {
+
+                    this.connected =
+                        false;
 
 
-                this.connected =
-                    state;
+                    return false;
 
-
-                return state;
+                }
 
             }
 
 
-            return false;
+            return true;
 
         },
 
@@ -1691,7 +1560,9 @@
             }
 
 
-            if (this.writing) {
+            if (
+                this.writing
+            ) {
 
                 throw new Error(
                     "Printer sedang menerima data."
@@ -1726,42 +1597,44 @@
                 );
 
 
-                switch (
-                    this.transport
+                if (
+                    this.transport === "ble"
                 ) {
 
-                    case "ble":
+                    await this.writeBLE(
+                        bytes
+                    );
 
-                        await this.writeBLE(
-                            bytes
-                        );
-
-                        break;
+                }
 
 
-                    case "serial":
+                else if (
+                    this.transport === "serial"
+                ) {
 
-                        await this.writeSerial(
-                            bytes
-                        );
+                    await this.writeSerial(
+                        bytes
+                    );
 
-                        break;
-
-
-                    case "bridge":
-
-                        await this.writeBridge(
-                            bytes
-                        );
-
-                        break;
+                }
 
 
-                    default:
+                else if (
+                    this.transport === "bridge"
+                ) {
 
-                        throw new Error(
-                            "Transport Bluetooth tidak dikenal."
-                        );
+                    await this.writeBridge(
+                        bytes
+                    );
+
+                }
+
+
+                else {
+
+                    throw new Error(
+                        "Transport Bluetooth tidak dikenal."
+                    );
 
                 }
 
@@ -1838,19 +1711,6 @@
             }
 
 
-            if (
-                ArrayBuffer.isView(data)
-            ) {
-
-                return new Uint8Array(
-                    data.buffer,
-                    data.byteOffset,
-                    data.byteLength
-                );
-
-            }
-
-
             throw new Error(
                 "Format data Bluetooth tidak didukung."
             );
@@ -1869,7 +1729,7 @@
             ) {
 
                 throw new Error(
-                    "BLE Write Characteristic tidak tersedia."
+                    "BLE write characteristic tidak tersedia."
                 );
 
             }
@@ -1888,16 +1748,16 @@
                 const chunk =
                     bytes.slice(
                         offset,
-                        offset + this.chunkSize
+                        offset +
+                        this.chunkSize
                     );
 
 
                 if (
-                    characteristic.properties
-                        .writeWithoutResponse &&
-                    typeof characteristic
-                        .writeValueWithoutResponse ===
-                        "function"
+                    characteristic.properties &&
+                    characteristic.properties.writeWithoutResponse &&
+                    typeof characteristic.writeValueWithoutResponse ===
+                    "function"
                 ) {
 
                     await characteristic
@@ -1908,11 +1768,10 @@
                 }
 
                 else if (
-                    characteristic.properties
-                        .write &&
-                    typeof characteristic
-                        .writeValue ===
-                        "function"
+                    characteristic.properties &&
+                    characteristic.properties.write &&
+                    typeof characteristic.writeValue ===
+                    "function"
                 ) {
 
                     await characteristic
@@ -1984,10 +1843,18 @@
                 offset += this.chunkSize
             ) {
 
+                const end =
+                    Math.min(
+                        offset +
+                        this.chunkSize,
+                        bytes.length
+                    );
+
+
                 const chunk =
                     bytes.slice(
                         offset,
-                        offset + this.chunkSize
+                        end
                     );
 
 
@@ -2006,14 +1873,20 @@
 
                 }
 
+
+                const percent =
+                    Math.round(
+                        (end / bytes.length) *
+                        100
+                    );
+
+
+                console.log(
+                    "Serial Print:",
+                    percent + "%"
+                );
+
             }
-
-
-            console.log(
-                "Serial data sent:",
-                bytes.length,
-                "bytes"
-            );
 
 
             return true;
@@ -2049,7 +1922,8 @@
                 const chunk =
                     bytes.slice(
                         offset,
-                        offset + this.chunkSize
+                        offset +
+                        this.chunkSize
                     );
 
 
@@ -2077,6 +1951,85 @@
 
 
         // =================================================
+        // GET DEVICE
+        // =================================================
+
+        getDevice() {
+
+            if (
+                this.transport === "ble"
+            ) {
+
+                return this.device;
+
+            }
+
+
+            if (
+                this.transport === "serial"
+            ) {
+
+                return this.port;
+
+            }
+
+
+            if (
+                this.transport === "bridge"
+            ) {
+
+                return this.bridge;
+
+            }
+
+
+            return null;
+
+        },
+
+
+        // =================================================
+        // GET DEVICE NAME
+        // =================================================
+
+        getDeviceName() {
+
+            if (
+                this.deviceName
+            ) {
+
+                return this.deviceName;
+
+            }
+
+
+            if (
+                this.device &&
+                this.device.name
+            ) {
+
+                return this.device.name;
+
+            }
+
+
+            return "";
+
+        },
+
+
+        // =================================================
+        // GET TRANSPORT
+        // =================================================
+
+        getTransport() {
+
+            return this.transport;
+
+        },
+
+
+        // =================================================
         // DISCONNECT
         // =================================================
 
@@ -2087,16 +2040,11 @@
             );
 
 
-            /*
-            =================================================
-            BLE
-            =================================================
-            */
+            // =================================================
+            // BLE
+            // =================================================
 
             try {
-
-                this.removeDisconnectListener();
-
 
                 if (
                     this.device &&
@@ -2120,11 +2068,9 @@
             }
 
 
-            /*
-            =================================================
-            SERIAL
-            =================================================
-            */
+            // =================================================
+            // SERIAL
+            // =================================================
 
             try {
 
@@ -2163,11 +2109,9 @@
             }
 
 
-            /*
-            =================================================
-            BRIDGE
-            =================================================
-            */
+            // =================================================
+            // BRIDGE
+            // =================================================
 
             try {
 
@@ -2189,7 +2133,7 @@
             }
 
 
-            this.resetRuntimeState();
+            this.resetConnectionState();
 
 
             this.updateStatus(
@@ -2205,7 +2149,9 @@
 
         attachDisconnectEvent() {
 
-            if (!this.device) {
+            if (
+                !this.device
+            ) {
 
                 return;
 
@@ -2285,10 +2231,10 @@
 
 
         // =================================================
-        // RESET RUNTIME
+        // RESET
         // =================================================
 
-        resetRuntimeState() {
+        resetConnectionState() {
 
             this.connected =
                 false;
@@ -2331,27 +2277,27 @@
 
             try {
 
-                if (this.device) {
+                if (
+                    this.device
+                ) {
+
+                    localStorage.setItem(
+                        "SMARTPRINT_PRINTER_NAME",
+                        this.device.name || ""
+                    );
+
 
                     localStorage.setItem(
                         "SMARTPRINT_PRINTER_ID",
                         this.device.id || ""
                     );
 
-
-                    if (this.device.name) {
-
-                        localStorage.setItem(
-                            "SMARTPRINT_PRINTER_NAME",
-                            this.device.name
-                        );
-
-                    }
-
                 }
 
 
-                if (this.deviceName) {
+                if (
+                    this.deviceName
+                ) {
 
                     localStorage.setItem(
                         "SMARTPRINT_PRINTER_NAME",
@@ -2361,7 +2307,9 @@
                 }
 
 
-                if (this.transport) {
+                if (
+                    this.transport
+                ) {
 
                     localStorage.setItem(
                         "SMARTPRINT_PRINTER_TRANSPORT",
@@ -2385,7 +2333,7 @@
 
 
         // =================================================
-        // CLEAR SAVED PRINTER
+        // CLEAR SAVED
         // =================================================
 
         clearSavedPrinter() {
@@ -2419,76 +2367,6 @@
             console.log(
                 "Saved printer cleared."
             );
-
-        },
-
-
-        // =================================================
-        // GET DEVICE
-        // =================================================
-
-        getDevice() {
-
-            switch (
-                this.transport
-            ) {
-
-                case "ble":
-
-                    return this.device;
-
-                case "serial":
-
-                    return this.port;
-
-                case "bridge":
-
-                    return this.bridge;
-
-                default:
-
-                    return null;
-
-            }
-
-        },
-
-
-        // =================================================
-        // GET DEVICE NAME
-        // =================================================
-
-        getDeviceName() {
-
-            if (this.deviceName) {
-
-                return this.deviceName;
-
-            }
-
-
-            if (
-                this.device &&
-                this.device.name
-            ) {
-
-                return this.device.name;
-
-            }
-
-
-            return "";
-
-        },
-
-
-        // =================================================
-        // GET TRANSPORT
-        // =================================================
-
-        getTransport() {
-
-            return this.transport;
 
         },
 
@@ -2606,68 +2484,20 @@
 
 
         // =================================================
-        // ERROR HANDLER
+        // ERROR
         // =================================================
 
-        handleConnectionError(error) {
-
-            this.connected =
-                false;
-
-
-            if (
-                error &&
-                error.name ===
-                "NotFoundError"
-            ) {
-
-                console.warn(
-                    "Pemilihan printer dibatalkan pengguna."
-                );
-
-
-                this.updateStatus(
-                    "disconnected"
-                );
-
-
-                return;
-
-            }
-
+        setError(message) {
 
             console.error(
                 "SmartPrint Bluetooth:",
-                error
+                message
             );
 
 
             this.updateStatus(
                 "error"
             );
-
-        },
-
-
-        // =================================================
-        // LOCAL STORAGE GET
-        // =================================================
-
-        getSaved(key) {
-
-            try {
-
-                return localStorage.getItem(
-                    key
-                );
-
-            }
-
-            catch (_) {
-
-                return null;
-
-            }
 
         },
 
@@ -2730,18 +2560,23 @@
 
 
     // =====================================================
-    // INIT
+    // READY
     // =====================================================
 
-    Bluetooth.init();
-
+    console.log(
+        "========================================"
+    );
 
     console.log(
-        "SmartPrint Bluetooth Engine v5.0 Ready"
+        "SmartPrint Bluetooth Engine v5.1 Ready"
     );
 
     console.log(
         "Transport: BLE + Serial + Classic Bridge"
+    );
+
+    console.log(
+        "========================================"
     );
 
 })();
