@@ -235,7 +235,27 @@
                 if (
     this.mode === "auto"
 ) {
+                 
+ // SERIAL
 
+            if (
+                this.transport === "serial"
+            ) {
+
+                if (
+                    !this.port ||
+                    !this.port.writable ||
+                    !this.writer
+                ) {
+
+                    this.connected =
+                        false;
+
+                    return false;
+
+                }
+
+            }
     // =====================================
     // 1. TRY BLE
     // =====================================
@@ -262,34 +282,29 @@
 
     }
 
+// =====================================
+// SERIAL
+// =====================================
+// Web Serial HARUS melalui tombol/user gesture.
+// Jangan dipanggil otomatis dari connect().
 
-    // =====================================
-    // 2. TRY SERIAL / COM
-    // =====================================
-    /*
-     * PENTING:
-     *
-     * connectSerial() hanya boleh dipanggil
-     * dari klik tombol Connect.
-     *
-     * Jangan panggil Serial otomatis dari
-     * autoConnect().
-     */
+console.log(
+    "BLE tidak terhubung."
+);
 
-    if (
-        this.isSerialSupported()
-    ) {
+console.log(
+    "Web Serial menunggu koneksi manual."
+);
 
-        console.log(
-            "Web Serial tersedia."
-        );
+this.connecting =
+    false;
 
-        console.log(
-            "Serial menunggu user gesture."
-        );
+this.updateStatus(
+    "disconnected"
+);
 
-    }
-
+return false;
+                 
 
     // =====================================
     // 3. TRY BRIDGE
@@ -1437,26 +1452,7 @@ async autoConnect() {
             }
 
 
-            // SERIAL
-
-            if (
-                this.transport === "serial"
-            ) {
-
-                if (
-                    !this.port ||
-                    !this.port.writable ||
-                    !this.writer
-                ) {
-
-                    this.connected =
-                        false;
-
-                    return false;
-
-                }
-
-            }
+           
 
 // =================================================
 // DIRECT USER CONNECT
