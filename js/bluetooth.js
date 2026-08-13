@@ -1458,7 +1458,191 @@ async autoConnect() {
 
             }
 
+// =================================================
+// DIRECT USER CONNECT
+// =================================================
 
+async connectUser() {
+
+    if (this.connecting) {
+
+        console.warn(
+            "Bluetooth connection sedang berjalan."
+        );
+
+        return false;
+
+    }
+
+
+    this.connecting =
+        true;
+
+    this.updateStatus(
+        "connecting"
+    );
+
+
+    try {
+
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            "SMARTPRINT USER CONNECT"
+        );
+
+        console.log(
+            "========================================"
+        );
+
+
+        // =====================================
+        // BLE
+        // =====================================
+
+        if (
+            this.isBluetoothSupported()
+        ) {
+
+            console.log(
+                "User Connect → BLE"
+            );
+
+            const ble =
+                await this.connectBLE();
+
+            if (ble) {
+
+                this.connecting =
+                    false;
+
+                this.saveDevice();
+
+                return true;
+
+            }
+
+        }
+
+
+        // =====================================
+        // SERIAL
+        // =====================================
+
+        if (
+            this.isSerialSupported()
+        ) {
+
+            console.log(
+                "User Connect → Serial / COM"
+            );
+
+            /*
+             * requestPort() DIPANGGIL LANGSUNG
+             * dalam rangkaian event klik.
+             */
+
+            const serial =
+                await this.connectSerial();
+
+            if (serial) {
+
+                this.connecting =
+                    false;
+
+                this.saveDevice();
+
+                return true;
+
+            }
+
+        }
+
+
+        // =====================================
+        // BRIDGE
+        // =====================================
+
+        if (
+            this.isBridgeSupported()
+        ) {
+
+            console.log(
+                "User Connect → Local Bridge"
+            );
+
+            const bridge =
+                await this.connectBridge();
+
+            if (bridge) {
+
+                this.connecting =
+                    false;
+
+                this.saveDevice();
+
+                return true;
+
+            }
+
+        }
+
+
+        this.connecting =
+            false;
+
+        this.updateStatus(
+            "disconnected"
+        );
+
+        return false;
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "User Bluetooth Connect Error:",
+            error
+        );
+
+
+        this.connecting =
+            false;
+
+
+        this.resetConnectionState();
+
+
+        if (
+            error &&
+            error.name === "NotFoundError"
+        ) {
+
+            console.warn(
+                "Pemilihan printer dibatalkan."
+            );
+
+            this.updateStatus(
+                "disconnected"
+            );
+
+            return false;
+
+        }
+
+
+        this.updateStatus(
+            "error"
+        );
+
+        return false;
+
+    }
+
+},
             // BRIDGE
 
             if (
