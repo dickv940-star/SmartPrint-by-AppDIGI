@@ -1738,39 +1738,120 @@ async autoConnect() {
 
 
         // =================================================
-        // SERIAL WRITE
-        // =================================================
+// SERIAL WRITE
+// =================================================
 
-        async writeSerial(bytes) {
+async writeSerial(bytes) {
+
+    if (!this.port) {
+
+        throw new Error(
+            "Serial port tidak tersedia."
+        );
+
+    }
+
+
+    if (!this.port.writable) {
+
+        throw new Error(
+            "Serial port tidak dapat ditulis."
+        );
+
+    }
+
+
+    /*
+    ================================================
+    PASTIKAN WRITER TERSEDIA
+    ================================================
+    */
+
+    if (!this.writer) {
+
+        this.writer =
+            this.port.writable.getWriter();
+
+    }
+
+
+    console.log(
+        "========================================"
+    );
+
+    console.log(
+        "SMARTPRINT SERIAL WRITE"
+    );
+
+    console.log(
+        "Bytes:",
+        bytes.length
+    );
+
+    console.log(
+        "Chunk:",
+        this.chunkSize
+    );
+
+    console.log(
+        "Delay:",
+        this.delay,
+        "ms"
+    );
+
+    console.log(
+        "========================================"
+    );
+
+
+    try {
+
+        /*
+        ============================================
+        KIRIM DATA PER CHUNK
+        ============================================
+        */
+
+        for (
+            let offset = 0;
+            offset < bytes.length;
+            offset += this.chunkSize
+        ) {
+
+            const end =
+                Math.min(
+                    offset + this.chunkSize,
+                    bytes.length
+                );
+
+
+            const chunk =
+                bytes.slice(
+                    offset,
+                    end
+                );
+
+
+            /*
+            ========================================
+            WRITE KE COM BLUETOOTH
+            ========================================
+            */
+
+            await this.writer.write(
+                chunk
+            );
+
+
+            /*
+            ========================================
+            DELAY
+            ========================================
+            */
 
             if (
-                !this.writer
+                this.delay > 0
             ) {
-
-                throw new Error(
-                    "Serial writer tidak tersedia."
-                );
-
-            }
-
-
-            for (
-                let offset = 0;
-                offset < bytes.length;
-                offset += this.chunkSize
-            ) {
-
-                const chunk =
-                    bytes.slice(
-                        offset,
-                        offset + this.chunkSize
-                    );
-
-
-                await this.writer.write(
-                    chunk
-                );
-
 
                 await this.sleep(
                     this.delay
@@ -1778,8 +1859,68 @@ async autoConnect() {
 
             }
 
-        },
 
+            /*
+            ========================================
+            PROGRESS
+            ========================================
+            */
+
+            if (
+                offset === 0 ||
+                offset % 10000 < this.chunkSize ||
+                end >= bytes.length
+            ) {
+
+                const percent =
+                    Math.round(
+                        (end / bytes.length) * 100
+                    );
+
+
+                console.log(
+                    "Serial Print:",
+                    percent + "%",
+                    end,
+                    "/",
+                    bytes.length
+                );
+
+            }
+
+        }
+
+
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            "SERIAL DATA SENT"
+        );
+
+        console.log(
+            "========================================"
+        );
+
+
+        return true;
+
+    }
+
+    catch (error) {
+
+        console.error(
+            "Serial Write Error:",
+            error
+        );
+
+
+        throw error;
+
+    }
+
+},
 
         // =================================================
         // BRIDGE WRITE
