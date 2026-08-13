@@ -2,67 +2,65 @@
 
 /*
 =====================================================
- SmartPrint TSPL Engine v5.3
+ SmartPrint Bluetooth Engine v5.4
 =====================================================
 
- TARGET
+ ROLE
  ----------------------------------------------------
- Label       : 100 x 150 mm
- DPI         : 203
- Canvas      : TIDAK DIUBAH
- Printer     : TSPL / TSPL2 compatible
+ Bluetooth / Serial Transport Layer ONLY
 
- TARGET DOT
+ TIDAK MENANGANI:
  ----------------------------------------------------
- Width       : 799 dots
- Height      : 1199 dots
- Bytes/Row   : 100 bytes
- Bitmap      : 119,900 bytes
+ - Preview
+ - Canvas
+ - Barcode
+ - QR
+ - TSPL
+ - ESC/POS
+ - ZPL
+ - CPCL
 
- BITMAP
+ SUPPORT
  ----------------------------------------------------
- Mode        : 0 = OVERWRITE
- Bit order   : MSB FIRST
- 1           : BLACK
- 0           : WHITE
-
- COLOR
- ----------------------------------------------------
- Background  : WHITE
- Transparent : WHITE
- Text        : BLACK
- Barcode     : BLACK
- QR          : BLACK
- Invert      : FALSE
-
- PRINT
- ----------------------------------------------------
- PRINT copies,1
-
- COMPATIBILITY
- ----------------------------------------------------
- SmartPrint Printer Manager v4.1
- SmartPrint Bluetooth Engine v5.4
- Web Bluetooth / Web Serial / Bridge
+ ✓ Web Bluetooth BLE
+ ✓ Web Serial
+ ✓ RAW Uint8Array
+ ✓ ArrayBuffer
+ ✓ Binary String
+ ✓ Chunked transmission
+ ✓ Auto Connect
+ ✓ Manual Connect
+ ✓ Disconnect
+ ✓ Connection Status
+ ✓ Printer Manager compatible
 
  IMPORTANT
  ----------------------------------------------------
- 1. Canvas asli TIDAK pernah diubah.
- 2. Bitmap dibuat pada canvas sementara.
- 3. Bitmap TIDAK di-TextEncoder.
- 4. Bitmap dikirim sebagai RAW Uint8Array.
- 5. Header/footer menggunakan ASCII bytes.
- 6. Tidak ada invert.
- 7. Transparansi dianggap WHITE.
- 8. Padding sisi kanan dianggap WHITE.
- 9. Proteksi full-black.
+ TSPL Engine berada di tspl.js
+ Printer Manager berada di printer.js
+
+ FLOW
+ ----------------------------------------------------
+
+ TSPL
+   ↓
+ Uint8Array
+   ↓
+ PrinterManager
+   ↓
+ Bluetooth.sendRaw()
+   ↓
+ Bluetooth transport
+   ↓
+ Printer
+
 =====================================================
 */
 
 
-const TSPL = (() => {
+const Bluetooth = (() => {
 
-    const VERSION = "5.3";
+    const VERSION = "5.4";
 
 
     /*
@@ -73,1264 +71,277 @@ const TSPL = (() => {
 
     const DEFAULTS = {
 
-        widthMM: 100,
-        heightMM: 150,
+        chunkSize: 180,
 
-        dpi: 203,
+        chunkDelay: 8,
 
-        widthDots: 799,
-        heightDots: 1199,
+        connectTimeout: 15000,
 
-        gap: 2,
+        writeTimeout: 10000,
 
-        density: 8,
-        speed: 4,
+        autoConnect: true,
 
-        copies: 1,
-
-        x: 0,
-        y: 0,
-
-        bitmapMode: 0,
-
-        threshold: 180,
-
-        invert: false,
-
-        transparentIsWhite: true,
-
-        debug: true
+        preferredTransport: "ble"
 
     };
 
 
     /*
     =================================================
-     BASIC HELPERS
+     STATE
     =================================================
     */
 
-    function num(value, fallback = 0) {
+    const state = {
 
-        const n = Number(value);
+        connected: false,
 
-        return Number.isFinite(n)
-            ? n
-            : fallback;
+        connecting: false,
 
-    }
+        transport: null,
 
+        device: null,
 
-    function int(value, fallback = 0) {
+        server: null,
 
-        const n = parseInt(
-            value,
-            10
-        );
+        service: null,
 
-        return Number.isFinite(n)
-            ? n
-            : fallback;
+        characteristic: null,
 
-    }
+        writer: null,
 
+        port: null,
 
-    function clamp(
-        value,
-        min,
-        max
-    ) {
+        lastError: null,
 
-        return Math.max(
-            min,
-            Math.min(max, value)
-        );
+        lastTransport: null,
 
-    }
+        lastWriteBytes: 0,
 
+        lastWriteTime: 0,
 
-    function mmToDots(
-        mm,
-        dpi
-    ) {
+        autoConnected: false
 
-        return Math.round(
-            num(mm) *
-            num(dpi) /
-            25.4
-        );
-
-    }
+    };
 
 
     /*
     =================================================
-     GET SETTINGS
+     EVENT SYSTEM
     =================================================
     */
 
-    function getSettings() {
+    const listeners = {
 
-        /*
-         * SmartPrint Settings object
-         */
+        connect: [],
 
-        try {
+        disconnect: [],
 
-            if (
-                typeof Settings !== "undefined" &&
-                Settings
-            ) {
+        error: [],
 
-                return Settings;
+        data: [],
 
-            }
+        status: []
 
-        } catch (error) {}
+    };
 
 
-        /*
-         * localStorage fallback
-         */
+    function emit(
+        event,
+        data
+    ) {
 
-        try {
+        const list =
+            listeners[event];
 
-            const raw =
-                localStorage.getItem(
-                    "SMARTPRINT_SETTINGS"
+        if (!list) {
+
+            return;
+
+        }
+
+
+        for (
+            const callback of list
+        ) {
+
+            try {
+
+                callback(data);
+
+            } catch (error) {
+
+                console.error(
+                    "Bluetooth event error:",
+                    error
                 );
 
-
-            if (raw) {
-
-                return JSON.parse(raw);
-
             }
 
-        } catch (error) {}
-
-
-        return {};
+        }
 
     }
 
 
-    /*
-    =================================================
-     FIND PRINTER SETTINGS
-    =================================================
-    */
-
-    function getPrinterSettings() {
-
-        const settings =
-            getSettings();
-
-
-        return (
-            settings.printer ||
-            settings.Printer ||
-            settings
-        );
-
-    }
-
-
-    /*
-    =================================================
-     FIND LABEL SETTINGS
-    =================================================
-    */
-
-    function getLabelSettings() {
-
-        const settings =
-            getSettings();
-
-
-        return (
-            settings.label ||
-            settings.Label ||
-            settings
-        );
-
-    }
-
-
-    /*
-    =================================================
-     BUILD CONFIG
-    =================================================
-    */
-
-    function getConfig(
-        options = {}
+    function on(
+        event,
+        callback
     ) {
 
-        const settings =
-            getSettings();
-
-
-        const printer =
-            getPrinterSettings();
-
-
-        const label =
-            getLabelSettings();
-
-
-        /*
-         * DPI
-         */
-
-        const dpi =
-            int(
-                options.dpi ??
-                printer.dpi ??
-                settings.dpi,
-                DEFAULTS.dpi
-            );
-
-
-        /*
-         * FORCE TARGET 100 x 150
-         *
-         * Jika tidak diberikan override,
-         * gunakan target SmartPrint.
-         */
-
-        const widthMM =
-            num(
-                options.widthMM ??
-                label.labelWidth,
-                DEFAULTS.widthMM
-            );
-
-
-        const heightMM =
-            num(
-                options.heightMM ??
-                label.labelHeight,
-                DEFAULTS.heightMM
-            );
-
-
-        /*
-         * Untuk target 100 x 150 @ 203 DPI:
-         *
-         * 100 / 25.4 * 203 = 799.21
-         * 150 / 25.4 * 203 = 1198.82
-         *
-         * => 799 x 1199
-         */
-
-        const widthDots =
-            int(
-                options.widthDots ??
-                (
-                    widthMM === 100 &&
-                    heightMM === 150 &&
-                    dpi === 203
-                        ? 799
-                        : mmToDots(
-                            widthMM,
-                            dpi
-                        )
-                ),
-                DEFAULTS.widthDots
-            );
-
-
-        const heightDots =
-            int(
-                options.heightDots ??
-                (
-                    widthMM === 100 &&
-                    heightMM === 150 &&
-                    dpi === 203
-                        ? 1199
-                        : mmToDots(
-                            heightMM,
-                            dpi
-                        )
-                ),
-                DEFAULTS.heightDots
-            );
-
-
-        /*
-         * GAP
-         */
-
-        const gap =
-            num(
-                options.gap ??
-                label.gap ??
-                printer.gap,
-                DEFAULTS.gap
-            );
-
-
-        /*
-         * DENSITY
-         */
-
-        const density =
-            clamp(
-                int(
-                    options.density ??
-                    printer.density ??
-                    settings.density,
-                    DEFAULTS.density
-                ),
-                0,
-                15
-            );
-
-
-        /*
-         * SPEED
-         */
-
-        const speed =
-            clamp(
-                num(
-                    options.speed ??
-                    printer.speed ??
-                    settings.speed,
-                    DEFAULTS.speed
-                ),
-                1,
-                12
-            );
-
-
-        /*
-         * COPIES
-         */
-
-        const copies =
-            Math.max(
-                1,
-                int(
-                    options.copies ??
-                    printer.copies ??
-                    settings.copies,
-                    DEFAULTS.copies
-                )
-            );
-
-
-        /*
-         * THRESHOLD
-         */
-
-        const threshold =
-            clamp(
-                int(
-                    options.threshold,
-                    DEFAULTS.threshold
-                ),
-                0,
-                255
-            );
-
-
-        return {
-
-            widthMM,
-            heightMM,
-
-            dpi,
-
-            widthDots,
-            heightDots,
-
-            gap,
-
-            density,
-            speed,
-
-            copies,
-
-            x:
-                int(
-                    options.x,
-                    DEFAULTS.x
-                ),
-
-            y:
-                int(
-                    options.y,
-                    DEFAULTS.y
-                ),
-
-            bitmapMode:
-                int(
-                    options.bitmapMode,
-                    DEFAULTS.bitmapMode
-                ),
-
-            threshold,
-
-            /*
-             * IMPORTANT:
-             * v5.3 selalu default FALSE.
-             */
-
-            invert: false,
-
-            transparentIsWhite: true,
-
-            debug:
-                options.debug !== false
-
-        };
-
-    }
-
-
-    /*
-    =================================================
-     VALIDATE CANVAS
-    =================================================
-    */
-
-    function validateCanvas(
-        canvas
-    ) {
-
-        if (!canvas) {
+        if (
+            !listeners[event]
+        ) {
 
             throw new Error(
-                "TSPL v5.3: previewCanvas tidak ditemukan."
+                "Bluetooth: event tidak dikenal: " +
+                event
             );
 
         }
 
 
         if (
-            typeof canvas.getContext !==
+            typeof callback !==
             "function"
         ) {
-
-            throw new Error(
-                "TSPL v5.3: object bukan canvas."
-            );
-
-        }
-
-
-        if (
-            canvas.width <= 0 ||
-            canvas.height <= 0
-        ) {
-
-            throw new Error(
-                "TSPL v5.3: ukuran canvas tidak valid."
-            );
-
-        }
-
-    }
-
-
-    /*
-    =================================================
-     CREATE TEMPORARY RASTER
-    =================================================
-    */
-
-    function createRaster(
-        sourceCanvas,
-        width,
-        height
-    ) {
-
-        let raster;
-
-
-        /*
-         * OffscreenCanvas jika tersedia.
-         */
-
-        if (
-            typeof OffscreenCanvas !==
-            "undefined"
-        ) {
-
-            raster =
-                new OffscreenCanvas(
-                    width,
-                    height
-                );
-
-        } else {
-
-            raster =
-                document.createElement(
-                    "canvas"
-                );
-
-            raster.width =
-                width;
-
-            raster.height =
-                height;
-
-        }
-
-
-        const ctx =
-            raster.getContext(
-                "2d",
-                {
-                    alpha: false,
-                    willReadFrequently: true
-                }
-            );
-
-
-        if (!ctx) {
-
-            throw new Error(
-                "TSPL v5.3: gagal membuat raster context."
-            );
-
-        }
-
-
-        /*
-         * WHITE BACKGROUND
-         *
-         * Ini sangat penting.
-         *
-         * Canvas transparent:
-         *     -> WHITE
-         *
-         * Bukan BLACK.
-         */
-
-        ctx.save();
-
-        ctx.globalCompositeOperation =
-            "source-over";
-
-        ctx.globalAlpha = 1;
-
-        ctx.fillStyle =
-            "#FFFFFF";
-
-        ctx.fillRect(
-            0,
-            0,
-            width,
-            height
-        );
-
-
-        /*
-         * Ambil desain dari canvas.
-         *
-         * Canvas asli hanya dibaca.
-         */
-
-        ctx.globalCompositeOperation =
-            "source-over";
-
-        ctx.globalAlpha = 1;
-
-        ctx.imageSmoothingEnabled =
-            true;
-
-        ctx.imageSmoothingQuality =
-            "high";
-
-
-        ctx.drawImage(
-            sourceCanvas,
-
-            0,
-            0,
-            sourceCanvas.width,
-            sourceCanvas.height,
-
-            0,
-            0,
-            width,
-            height
-        );
-
-
-        ctx.restore();
-
-
-        return raster;
-
-    }
-
-
-    /*
-    =================================================
-     RGB -> GRAYSCALE
-    =================================================
-    */
-
-    function grayscale(
-        r,
-        g,
-        b
-    ) {
-
-        return (
-            0.299 * r +
-            0.587 * g +
-            0.114 * b
-        );
-
-    }
-
-
-    /*
-    =================================================
-     PIXEL -> BLACK / WHITE
-    =================================================
-    */
-
-    function isBlack(
-        r,
-        g,
-        b,
-        a,
-        threshold
-    ) {
-
-        /*
-         * Transparent = WHITE
-         */
-
-        if (a === 0) {
 
             return false;
 
         }
 
 
-        /*
-         * Composite semi-transparent pixel
-         * terhadap WHITE.
-         */
-
-        if (a < 255) {
-
-            const alpha =
-                a / 255;
-
-
-            r =
-                r * alpha +
-                255 * (1 - alpha);
-
-
-            g =
-                g * alpha +
-                255 * (1 - alpha);
-
-
-            b =
-                b * alpha +
-                255 * (1 - alpha);
-
-        }
-
-
-        const gray =
-            grayscale(
-                r,
-                g,
-                b
-            );
-
-
-        /*
-         * FALSE = normal.
-         *
-         * Gelap -> BLACK
-         * Terang -> WHITE
-         */
-
-        return gray < threshold;
-
-    }
-
-
-    /*
-    =================================================
-     CANVAS -> RAW BITMAP
-    =================================================
-    */
-
-    function rasterize(
-        sourceCanvas,
-        config
-    ) {
-
-        validateCanvas(
-            sourceCanvas
+        listeners[event].push(
+            callback
         );
 
 
-        const width =
-            config.widthDots;
-
-
-        const height =
-            config.heightDots;
-
-
-        /*
-         * TSPL width adalah BYTE,
-         * bukan DOT.
-         */
-
-        const bytesPerRow =
-            Math.ceil(
-                width / 8
-            );
-
-
-        /*
-         * 799 dots:
-         *
-         * ceil(799 / 8)
-         * = 100 bytes
-         */
-
-        const totalBytes =
-            bytesPerRow *
-            height;
-
-
-        /*
-         * Temporary raster.
-         */
-
-        const raster =
-            createRaster(
-                sourceCanvas,
-                width,
-                height
-            );
-
-
-        const ctx =
-            raster.getContext(
-                "2d",
-                {
-                    willReadFrequently: true
-                }
-            );
-
-
-        const image =
-            ctx.getImageData(
-                0,
-                0,
-                width,
-                height
-            );
-
-
-        const pixels =
-            image.data;
-
-
-        /*
-         * RAW bitmap.
-         *
-         * Jangan String.
-         * Jangan Base64.
-         * Jangan TextEncoder.
-         */
-
-        const bitmap =
-            new Uint8Array(
-                totalBytes
-            );
-
-
-        let blackPixels = 0;
-
-
-        /*
-         * =================================================
-         * MSB FIRST
-         *
-         * x=0 -> bit 7
-         * x=1 -> bit 6
-         * x=2 -> bit 5
-         * ...
-         * x=7 -> bit 0
-         *
-         * =================================================
-         */
-
-        for (
-            let y = 0;
-            y < height;
-            y++
-        ) {
-
-            const rowStart =
-                y *
-                bytesPerRow;
-
-
-            for (
-                let x = 0;
-                x < width;
-                x++
-            ) {
-
-                const pixel =
-                    (
-                        y *
-                        width +
-                        x
-                    ) * 4;
-
-
-                const r =
-                    pixels[pixel];
-
-
-                const g =
-                    pixels[pixel + 1];
-
-
-                const b =
-                    pixels[pixel + 2];
-
-
-                const a =
-                    pixels[pixel + 3];
-
-
-                const black =
-                    isBlack(
-                        r,
-                        g,
-                        b,
-                        a,
-                        config.threshold
-                    );
-
-
-                if (!black) {
-
-                    /*
-                     * 0 = WHITE
-                     */
-
-                    continue;
-
-                }
-
-
-                blackPixels++;
-
-
-                const byteIndex =
-                    rowStart +
-                    Math.floor(
-                        x / 8
-                    );
-
-
-                const bitIndex =
-                    7 -
-                    (x % 8);
-
-
-                /*
-                 * BLACK = 1
-                 */
-
-                bitmap[byteIndex] |=
-                    (
-                        1 <<
-                        bitIndex
-                    );
-
-            }
-
-        }
-
-
-        /*
-         * =================================================
-         * SAFETY CHECK
-         * =================================================
-         */
-
-        const totalPixels =
-            width *
-            height;
-
-
-        const blackRatio =
-            totalPixels > 0
-                ? blackPixels /
-                  totalPixels
-                : 0;
-
-
-        return {
-
-            bitmap,
-
-            width,
-
-            height,
-
-            bytesPerRow,
-
-            totalBytes,
-
-            blackPixels,
-
-            totalPixels,
-
-            blackRatio
-
-        };
+        return true;
 
     }
 
 
-    /*
-    =================================================
-     ASCII -> UINT8
-    =================================================
-    */
-
-    function asciiBytes(
-        text
+    function off(
+        event,
+        callback
     ) {
-
-        /*
-         * Header/footer adalah ASCII TSPL.
-         *
-         * HANYA bagian ini menggunakan
-         * TextEncoder.
-         */
-
-        return new TextEncoder()
-            .encode(text);
-
-    }
-
-
-    /*
-    =================================================
-     CONCAT RAW UINT8 ARRAYS
-    =================================================
-    */
-
-    function concatBytes(
-        ...arrays
-    ) {
-
-        let total = 0;
-
-
-        for (
-            const array of arrays
-        ) {
-
-            if (!array) {
-
-                continue;
-
-            }
-
-
-            total +=
-                array.length;
-
-        }
-
-
-        const output =
-            new Uint8Array(
-                total
-            );
-
-
-        let offset = 0;
-
-
-        for (
-            const array of arrays
-        ) {
-
-            if (!array) {
-
-                continue;
-
-            }
-
-
-            output.set(
-                array,
-                offset
-            );
-
-
-            offset +=
-                array.length;
-
-        }
-
-
-        return output;
-
-    }
-
-
-    /*
-    =================================================
-     BUILD TSPL HEADER
-    =================================================
-    */
-
-    function buildHeader(
-        config
-    ) {
-
-        return [
-
-            `SIZE ${config.widthMM} mm,${config.heightMM} mm`,
-
-            `GAP ${config.gap} mm,0`,
-
-            `DENSITY ${config.density}`,
-
-            `SPEED ${config.speed}`,
-
-            `CLS`,
-
-            `BITMAP ${config.x},${config.y},`
-
-        ].join("\r\n");
-
-    }
-
-
-    /*
-    =================================================
-     IMPORTANT:
-     BUILD BITMAP PREFIX
-    =================================================
-    */
-
-    function buildBitmapPrefix(
-        config,
-        bitmap
-    ) {
-
-        /*
-         * Jangan masukkan bitmap ke string.
-         *
-         * Prefix berhenti tepat setelah comma.
-         */
-
-        return (
-            `BITMAP ` +
-            `${config.x},` +
-            `${config.y},` +
-            `${bitmap.bytesPerRow},` +
-            `${bitmap.height},` +
-            `${config.bitmapMode},`
-        );
-
-    }
-
-
-    /*
-    =================================================
-     BUILD PRINT
-    =================================================
-    */
-
-    function buildPrint(
-        config
-    ) {
-
-        return (
-            `PRINT ${config.copies},1\r\n`
-        );
-
-    }
-
-
-    /*
-    =================================================
-     BUILD RAW JOB
-    =================================================
-    */
-
-    function buildJob(
-        sourceCanvas,
-        options = {}
-    ) {
-
-        const config =
-            getConfig(
-                options
-            );
-
-
-        const bitmap =
-            rasterize(
-                sourceCanvas,
-                config
-            );
-
-
-        /*
-         * =================================================
-         * BLACK BLOCK PROTECTION
-         * =================================================
-         *
-         * > 98% hitam:
-         * hampir pasti masalah raster/
-         * transparency/transport.
-         */
 
         if (
-            bitmap.blackRatio >= 0.98
+            !listeners[event]
         ) {
 
-            throw new Error(
-                "TSPL v5.3: JOB DIBATALKAN. " +
-                "Bitmap terdeteksi >=98% hitam. " +
-                "Canvas asli tidak diubah."
-            );
+            return false;
 
         }
 
 
-        /*
-         * =================================================
-         * HEADER
-         * =================================================
-         */
-
-        const header =
-            [
-                `SIZE ${config.widthMM} mm,${config.heightMM} mm`,
-                `GAP ${config.gap} mm,0`,
-                `DENSITY ${config.density}`,
-                `SPEED ${config.speed}`,
-                `CLS`
-            ].join("\r\n");
-
-
-        /*
-         * =================================================
-         * BITMAP PREFIX
-         * =================================================
-         */
-
-        const bitmapPrefix =
-            buildBitmapPrefix(
-                config,
-                bitmap
+        const index =
+            listeners[event].indexOf(
+                callback
             );
 
 
-        /*
-         * =================================================
-         * FOOTER
-         * =================================================
-         *
-         * Tidak ada data bitmap di string.
-         */
+        if (
+            index !== -1
+        ) {
 
-        const footer =
-            "\r\n" +
-            buildPrint(
-                config
+            listeners[event].splice(
+                index,
+                1
             );
 
+            return true;
 
-        /*
-         * =================================================
-         * CONVERT ASCII ONLY
-         * =================================================
-         */
-
-        const headerBytes =
-            asciiBytes(
-                header +
-                "\r\n"
-            );
+        }
 
 
-        const bitmapPrefixBytes =
-            asciiBytes(
-                bitmapPrefix
-            );
+        return false;
+
+    }
 
 
-        const footerBytes =
-            asciiBytes(
-                footer
-            );
+    /*
+    =================================================
+     HELPERS
+    =================================================
+    */
+
+    function num(
+        value,
+        fallback = 0
+    ) {
+
+        const n =
+            Number(value);
 
 
-        /*
-         * =================================================
-         * RAW JOB
-         * =================================================
-         *
-         * HEADER ASCII
-         * +
-         * BITMAP PREFIX ASCII
-         * +
-         * RAW BITMAP
-         * +
-         * FOOTER ASCII
-         */
+        return Number.isFinite(n)
+            ? n
+            : fallback;
 
-        const data =
-            concatBytes(
+    }
 
-                headerBytes,
 
-                bitmapPrefixBytes,
+    function sleep(
+        ms
+    ) {
 
-                bitmap.bitmap,
+        return new Promise(
+            resolve =>
+                setTimeout(
+                    resolve,
+                    Math.max(
+                        0,
+                        num(ms)
+                    )
+                )
+        );
 
-                footerBytes
+    }
 
-            );
 
+    function getConfig(
+        options = {}
+    ) {
 
         return {
 
-            data,
+            chunkSize:
+                Math.max(
+                    20,
+                    Math.floor(
+                        num(
+                            options.chunkSize,
+                            DEFAULTS.chunkSize
+                        )
+                    )
+                ),
 
-            config,
+            chunkDelay:
+                Math.max(
+                    0,
+                    num(
+                        options.chunkDelay,
+                        DEFAULTS.chunkDelay
+                    )
+                ),
 
-            bitmap,
+            connectTimeout:
+                Math.max(
+                    1000,
+                    num(
+                        options.connectTimeout,
+                        DEFAULTS.connectTimeout
+                    )
+                ),
 
-            headerBytes,
-
-            bitmapPrefixBytes,
-
-            footerBytes
+            writeTimeout:
+                Math.max(
+                    1000,
+                    num(
+                        options.writeTimeout,
+                        DEFAULTS.writeTimeout
+                    )
+                )
 
         };
 
@@ -1339,528 +350,384 @@ const TSPL = (() => {
 
     /*
     =================================================
-     HEX PREVIEW
+     STATUS
     =================================================
     */
 
-    function hex(
-        bytes,
-        max = 64
-    ) {
-
-        const limit =
-            Math.min(
-                bytes.length,
-                max
-            );
-
-
-        const output = [];
-
-
-        for (
-            let i = 0;
-            i < limit;
-            i++
-        ) {
-
-            output.push(
-                bytes[i]
-                    .toString(16)
-                    .padStart(
-                        2,
-                        "0"
-                    )
-                    .toUpperCase()
-            );
-
-        }
-
-
-        return output.join(" ");
-
-    }
-
-
-    /*
-    =================================================
-     CHECK BITMAP
-    =================================================
-    */
-
-    function inspect(
-        canvas,
-        options = {}
-    ) {
-
-        const job =
-            buildJob(
-                canvas,
-                options
-            );
-
-
-        const bitmap =
-            job.bitmap;
-
-
-        /*
-         * Hitam pertama.
-         */
-
-        let firstBlack =
-            -1;
-
-
-        for (
-            let i = 0;
-            i < bitmap.bitmap.length;
-            i++
-        ) {
-
-            if (
-                bitmap.bitmap[i] !== 0
-            ) {
-
-                firstBlack =
-                    i;
-
-                break;
-
-            }
-
-        }
-
-
-        /*
-         * Hitam terakhir.
-         */
-
-        let lastBlack =
-            -1;
-
-
-        for (
-            let i =
-                bitmap.bitmap.length - 1;
-            i >= 0;
-            i--
-        ) {
-
-            if (
-                bitmap.bitmap[i] !== 0
-            ) {
-
-                lastBlack =
-                    i;
-
-                break;
-
-            }
-
-        }
-
+    function getStatus() {
 
         return {
 
             version:
                 VERSION,
 
-            label:
-                `${job.config.widthMM} x ` +
-                `${job.config.heightMM} mm`,
+            connected:
+                state.connected,
 
-            dpi:
-                job.config.dpi,
+            connecting:
+                state.connecting,
 
-            widthDots:
-                bitmap.width,
+            transport:
+                state.transport,
 
-            heightDots:
-                bitmap.height,
+            device:
+                state.device
+                    ? {
+                        id:
+                            state.device.id || null,
 
-            bytesPerRow:
-                bitmap.bytesPerRow,
+                        name:
+                            state.device.name || null
+                    }
+                    : null,
 
-            bitmapBytes:
-                bitmap.totalBytes,
+            port:
+                state.port
+                    ? true
+                    : false,
 
-            blackPixels:
-                bitmap.blackPixels,
+            lastTransport:
+                state.lastTransport,
 
-            totalPixels:
-                bitmap.totalPixels,
+            lastWriteBytes:
+                state.lastWriteBytes,
 
-            blackRatio:
-                bitmap.blackRatio,
+            lastWriteTime:
+                state.lastWriteTime,
 
-            blackPercent:
-                (
-                    bitmap.blackRatio *
-                    100
-                ).toFixed(2) + "%",
-
-            firstBlackByte:
-                firstBlack,
-
-            lastBlackByte:
-                lastBlack,
-
-            first64BitmapBytes:
-                hex(
-                    bitmap.bitmap,
-                    64
-                ),
-
-            first64JobBytes:
-                hex(
-                    job.data,
-                    64
-                ),
-
-            totalJobBytes:
-                job.data.length
+            lastError:
+                state.lastError
 
         };
 
     }
 
 
+    function setConnected(
+        value,
+        transport = null
+    ) {
+
+        state.connected =
+            value === true;
+
+        state.transport =
+            state.connected
+                ? transport
+                : null;
+
+
+        emit(
+            "status",
+            getStatus()
+        );
+
+    }
+
+
     /*
     =================================================
-     PRINT TRANSPORT RESOLVER
+     DATA NORMALIZER
     =================================================
     */
 
-    async function sendRaw(
+    function toUint8Array(
         data
     ) {
 
         if (
-            !(data instanceof Uint8Array)
+            data instanceof Uint8Array
+        ) {
+
+            return data;
+
+        }
+
+
+        if (
+            data instanceof ArrayBuffer
+        ) {
+
+            return new Uint8Array(
+                data
+            );
+
+        }
+
+
+        if (
+            ArrayBuffer.isView(data)
+        ) {
+
+            return new Uint8Array(
+                data.buffer,
+                data.byteOffset,
+                data.byteLength
+            );
+
+        }
+
+
+        if (
+            typeof data ===
+            "string"
+        ) {
+
+            const result =
+                new Uint8Array(
+                    data.length
+                );
+
+
+            for (
+                let i = 0;
+                i < data.length;
+                i++
+            ) {
+
+                result[i] =
+                    data.charCodeAt(i) &
+                    0xFF;
+
+            }
+
+
+            return result;
+
+        }
+
+
+        if (
+            Array.isArray(data)
+        ) {
+
+            return new Uint8Array(
+                data
+            );
+
+        }
+
+
+        throw new Error(
+            "Bluetooth: data harus Uint8Array, ArrayBuffer, View, Array, atau binary string."
+        );
+
+    }
+
+
+    /*
+    =================================================
+     WEB BLUETOOTH SUPPORT
+    =================================================
+    */
+
+    function supportedBLE() {
+
+        return (
+            typeof navigator !==
+            "undefined" &&
+            "bluetooth" in navigator
+        );
+
+    }
+
+
+    /*
+    =================================================
+     BLE DEVICE REQUEST
+    =================================================
+     */
+
+    async function requestBLEDevice(
+        options = {}
+    ) {
+
+        if (
+            !supportedBLE()
         ) {
 
             throw new Error(
-                "TSPL v5.3: transport membutuhkan Uint8Array."
+                "Web Bluetooth tidak tersedia pada browser ini."
+            );
+
+        }
+
+
+        const filters =
+            options.filters ||
+            null;
+
+
+        const optionalServices =
+            options.optionalServices ||
+            [];
+
+
+        let requestOptions;
+
+
+        /*
+         * User dapat memberikan
+         * filter custom dari Printer Manager.
+         */
+
+        if (
+            Array.isArray(filters) &&
+            filters.length
+        ) {
+
+            requestOptions = {
+
+                filters,
+
+                optionalServices
+
+            };
+
+        } else {
+
+            /*
+             * Tanpa filter:
+             *
+             * tampilkan device Bluetooth
+             * yang tersedia.
+             */
+
+            requestOptions = {
+
+                acceptAllDevices: true,
+
+                optionalServices
+
+            };
+
+        }
+
+
+        const device =
+            await navigator.bluetooth.requestDevice(
+                requestOptions
+            );
+
+
+        if (!device) {
+
+            throw new Error(
+                "Bluetooth: device tidak dipilih."
+            );
+
+        }
+
+
+        return device;
+
+    }
+
+
+    /*
+    =================================================
+     FIND WRITE CHARACTERISTIC
+    =================================================
+     */
+
+    async function findWritableCharacteristic(
+        server,
+        options = {}
+    ) {
+
+        if (!server) {
+
+            throw new Error(
+                "Bluetooth: GATT server tidak tersedia."
             );
 
         }
 
 
         /*
-         * =================================================
-         * 1. SmartPrint Printer Manager v4.1
-         * =================================================
+         * Jika UUID diberikan,
+         * prioritaskan UUID tersebut.
          */
 
         if (
-            typeof PrinterManager !==
-            "undefined" &&
-            PrinterManager
+            options.serviceUUID &&
+            options.characteristicUUID
         ) {
 
-            /*
-             * raw()
-             */
-
-            if (
-                typeof PrinterManager.raw ===
-                "function"
-            ) {
-
-                return await PrinterManager.raw(
-                    data
+            const service =
+                await server.getPrimaryService(
+                    options.serviceUUID
                 );
 
-            }
 
-
-            /*
-             * printRaw()
-             */
-
-            if (
-                typeof PrinterManager.printRaw ===
-                "function"
-            ) {
-
-                return await PrinterManager.printRaw(
-                    data
+            const characteristic =
+                await service.getCharacteristic(
+                    options.characteristicUUID
                 );
 
-            }
 
+            return {
 
-            /*
-             * sendRaw()
-             */
+                service,
 
-            if (
-                typeof PrinterManager.sendRaw ===
-                "function"
-            ) {
+                characteristic
 
-                return await PrinterManager.sendRaw(
-                    data
-                );
-
-            }
-
-
-            /*
-             * send()
-             */
-
-            if (
-                typeof PrinterManager.send ===
-                "function"
-            ) {
-
-                return await PrinterManager.send(
-                    data
-                );
-
-            }
-
-
-            /*
-             * write()
-             */
-
-            if (
-                typeof PrinterManager.write ===
-                "function"
-            ) {
-
-                return await PrinterManager.write(
-                    data
-                );
-
-            }
-
-
-            /*
-             * print()
-             */
-
-            if (
-                typeof PrinterManager.print ===
-                "function"
-            ) {
-
-                return await PrinterManager.print(
-                    data
-                );
-
-            }
+            };
 
         }
 
 
         /*
-         * =================================================
-         * 2. SmartPrint Printer v4.1
-         * =================================================
+         * Ambil semua primary services.
          */
 
-        if (
-            typeof Printer !==
-            "undefined" &&
-            Printer
+        const services =
+            await server.getPrimaryServices();
+
+
+        for (
+            const service of services
         ) {
 
-            if (
-                typeof Printer.raw ===
-                "function"
-            ) {
-
-                return await Printer.raw(
-                    data
-                );
-
-            }
+            let characteristics;
 
 
-            if (
-                typeof Printer.printRaw ===
-                "function"
-            ) {
+            try {
 
-                return await Printer.printRaw(
-                    data
-                );
+                characteristics =
+                    await service.getCharacteristics();
+
+            } catch (error) {
+
+                continue;
 
             }
 
 
-            if (
-                typeof Printer.sendRaw ===
-                "function"
+            for (
+                const characteristic
+                of characteristics
             ) {
 
-                return await Printer.sendRaw(
-                    data
-                );
-
-            }
+                const properties =
+                    characteristic.properties ||
+                    {};
 
 
-            if (
-                typeof Printer.send ===
-                "function"
-            ) {
+                if (
+                    properties.write ||
+                    properties.writeWithoutResponse
+                ) {
 
-                return await Printer.send(
-                    data
-                );
+                    return {
 
-            }
+                        service,
 
+                        characteristic
 
-            if (
-                typeof Printer.write ===
-                "function"
-            ) {
+                    };
 
-                return await Printer.write(
-                    data
-                );
-
-            }
-
-        }
-
-
-        /*
-         * =================================================
-         * 3. Bluetooth Engine v5.4
-         * =================================================
-         */
-
-        if (
-            typeof Bluetooth !==
-            "undefined" &&
-            Bluetooth
-        ) {
-
-            if (
-                typeof Bluetooth.sendRaw ===
-                "function"
-            ) {
-
-                return await Bluetooth.sendRaw(
-                    data
-                );
-
-            }
-
-
-            if (
-                typeof Bluetooth.raw ===
-                "function"
-            ) {
-
-                return await Bluetooth.raw(
-                    data
-                );
-
-            }
-
-
-            if (
-                typeof Bluetooth.send ===
-                "function"
-            ) {
-
-                return await Bluetooth.send(
-                    data
-                );
-
-            }
-
-
-            if (
-                typeof Bluetooth.write ===
-                "function"
-            ) {
-
-                return await Bluetooth.write(
-                    data
-                );
-
-            }
-
-
-            if (
-                typeof Bluetooth.writeRaw ===
-                "function"
-            ) {
-
-                return await Bluetooth.writeRaw(
-                    data
-                );
-
-            }
-
-        }
-
-
-        /*
-         * =================================================
-         * 4. SmartPrint BluetoothEngine
-         * =================================================
-         */
-
-        if (
-            typeof BluetoothEngine !==
-            "undefined" &&
-            BluetoothEngine
-        ) {
-
-            if (
-                typeof BluetoothEngine.sendRaw ===
-                "function"
-            ) {
-
-                return await BluetoothEngine.sendRaw(
-                    data
-                );
-
-            }
-
-
-            if (
-                typeof BluetoothEngine.raw ===
-                "function"
-            ) {
-
-                return await BluetoothEngine.raw(
-                    data
-                );
-
-            }
-
-
-            if (
-                typeof BluetoothEngine.send ===
-                "function"
-            ) {
-
-                return await BluetoothEngine.send(
-                    data
-                );
-
-            }
-
-
-            if (
-                typeof BluetoothEngine.write ===
-                "function"
-            ) {
-
-                return await BluetoothEngine.write(
-                    data
-                );
+                }
 
             }
 
@@ -1868,7 +735,7 @@ const TSPL = (() => {
 
 
         throw new Error(
-            "TSPL v5.3: Tidak ditemukan RAW transport pada Printer Manager / Bluetooth Engine."
+            "Bluetooth: tidak ditemukan characteristic WRITE."
         );
 
     }
@@ -1876,112 +743,473 @@ const TSPL = (() => {
 
     /*
     =================================================
-     PRINT
+     CONNECT BLE DEVICE
     =================================================
     */
 
-    async function print(
-        canvas,
+    async function connectBLE(
+        device,
         options = {}
     ) {
 
-        const job =
-            buildJob(
-                canvas,
-                options
+        if (!device) {
+
+            device =
+                await requestBLEDevice(
+                    options
+                );
+
+        }
+
+
+        state.connecting =
+            true;
+
+        state.lastError =
+            null;
+
+
+        emit(
+            "status",
+            getStatus()
+        );
+
+
+        try {
+
+            /*
+             * Device disconnect event.
+             */
+
+            if (
+                typeof device.addEventListener ===
+                "function"
+            ) {
+
+                device.removeEventListener(
+                    "gattserverdisconnected",
+                    handleDeviceDisconnected
+                );
+
+
+                device.addEventListener(
+                    "gattserverdisconnected",
+                    handleDeviceDisconnected
+                );
+
+            }
+
+
+            const server =
+                await device.gatt.connect();
+
+
+            const found =
+                await findWritableCharacteristic(
+                    server,
+                    options
+                );
+
+
+            state.device =
+                device;
+
+            state.server =
+                server;
+
+            state.service =
+                found.service;
+
+            state.characteristic =
+                found.characteristic;
+
+            state.port =
+                null;
+
+            state.writer =
+                null;
+
+
+            const characteristic =
+                state.characteristic;
+
+
+            const properties =
+                characteristic.properties ||
+                {};
+
+
+            state.lastTransport =
+                properties.writeWithoutResponse
+                    ? "ble-writeWithoutResponse"
+                    : "ble-write";
+
+
+            setConnected(
+                true,
+                "ble"
             );
 
+
+            state.connecting =
+                false;
+
+            state.autoConnected =
+                false;
+
+
+            emit(
+                "connect",
+                getStatus()
+            );
+
+
+            return getStatus();
+
+        } catch (error) {
+
+            state.connecting =
+                false;
+
+            state.connected =
+                false;
+
+            state.lastError =
+                error;
+
+
+            emit(
+                "error",
+                error
+            );
+
+
+            emit(
+                "status",
+                getStatus()
+            );
+
+
+            throw error;
+
+        }
+
+    }
+
+
+    /*
+    =================================================
+     DEVICE DISCONNECTED EVENT
+    =================================================
+    */
+
+    function handleDeviceDisconnected() {
+
+        state.connected =
+            false;
+
+        state.server =
+            null;
+
+        state.service =
+            null;
+
+        state.characteristic =
+            null;
+
+        state.lastTransport =
+            null;
+
+
+        emit(
+            "disconnect",
+            getStatus()
+        );
+
+
+        emit(
+            "status",
+            getStatus()
+        );
+
+    }
+
+
+    /*
+    =================================================
+     WEB SERIAL SUPPORT
+    =================================================
+    */
+
+    function supportedSerial() {
+
+        return (
+            typeof navigator !==
+            "undefined" &&
+            "serial" in navigator
+        );
+
+    }
+
+
+    /*
+    =================================================
+     REQUEST SERIAL PORT
+    =================================================
+    */
+
+    async function requestSerialPort(
+        options = {}
+    ) {
 
         if (
-            options.debug !== false
+            !supportedSerial()
         ) {
 
-            console.log(
-                "===================================="
-            );
-
-            console.log(
-                "SmartPrint TSPL Engine v" +
-                VERSION
-            );
-
-            console.log(
-                "===================================="
-            );
-
-            console.log(
-                "Label:",
-                job.config.widthMM,
-                "x",
-                job.config.heightMM,
-                "mm"
-            );
-
-            console.log(
-                "DPI:",
-                job.config.dpi
-            );
-
-            console.log(
-                "Dots:",
-                job.bitmap.width,
-                "x",
-                job.bitmap.height
-            );
-
-            console.log(
-                "Bytes / Row:",
-                job.bitmap.bytesPerRow
-            );
-
-            console.log(
-                "Bitmap:",
-                job.bitmap.totalBytes,
-                "bytes"
-            );
-
-            console.log(
-                "Black:",
-                (
-                    job.bitmap.blackRatio *
-                    100
-                ).toFixed(2) +
-                "%"
-            );
-
-            console.log(
-                "RAW Job:",
-                job.data.length,
-                "bytes"
-            );
-
-            console.log(
-                "Bitmap first bytes:",
-                hex(
-                    job.bitmap.bitmap,
-                    32
-                )
-            );
-
-            console.log(
-                "===================================="
+            throw new Error(
+                "Web Serial tidak tersedia pada browser ini."
             );
 
         }
 
 
+        const port =
+            await navigator.serial.requestPort(
+                options
+            );
+
+
+        return port;
+
+    }
+
+
+    /*
+    =================================================
+     CONNECT SERIAL
+    =================================================
+    */
+
+    async function connectSerial(
+        port,
+        options = {}
+    ) {
+
+        if (!port) {
+
+            port =
+                await requestSerialPort(
+                    options
+                );
+
+        }
+
+
+        const baudRate =
+            Math.max(
+                300,
+                Math.floor(
+                    num(
+                        options.baudRate,
+                        9600
+                    )
+                )
+            );
+
+
+        state.connecting =
+            true;
+
+        state.lastError =
+            null;
+
+
+        try {
+
+            await port.open({
+
+                baudRate,
+
+                dataBits:
+                    options.dataBits || 8,
+
+                stopBits:
+                    options.stopBits || 1,
+
+                parity:
+                    options.parity || "none",
+
+                flowControl:
+                    options.flowControl || "none"
+
+            });
+
+
+            state.port =
+                port;
+
+            state.device =
+                null;
+
+            state.server =
+                null;
+
+            state.service =
+                null;
+
+            state.characteristic =
+                null;
+
+
+            state.lastTransport =
+                "serial";
+
+
+            setConnected(
+                true,
+                "serial"
+            );
+
+
+            state.connecting =
+                false;
+
+
+            emit(
+                "connect",
+                getStatus()
+            );
+
+
+            return getStatus();
+
+        } catch (error) {
+
+            state.connecting =
+                false;
+
+            state.connected =
+                false;
+
+            state.lastError =
+                error;
+
+
+            emit(
+                "error",
+                error
+            );
+
+
+            throw error;
+
+        }
+
+    }
+
+
+    /*
+    =================================================
+     WRITE BLE CHUNK
+    =================================================
+    */
+
+    async function writeBLEChunk(
+        chunk,
+        options = {}
+    ) {
+
+        const characteristic =
+            state.characteristic;
+
+
+        if (!characteristic) {
+
+            throw new Error(
+                "Bluetooth: BLE characteristic belum tersedia."
+            );
+
+        }
+
+
+        const properties =
+            characteristic.properties ||
+            {};
+
+
         /*
-         * PENTING:
+         * Prioritas:
          *
-         * Kirim Uint8Array.
-         *
-         * BUKAN string.
-         *
-         * BUKAN Base64.
+         * writeWithoutResponse
+         * kemudian write
          */
 
-        return await sendRaw(
-            job.data
+        if (
+            properties.writeWithoutResponse &&
+            typeof characteristic.writeValueWithoutResponse ===
+            "function"
+        ) {
+
+            await characteristic
+                .writeValueWithoutResponse(
+                    chunk
+                );
+
+            return;
+
+        }
+
+
+        if (
+            properties.write &&
+            typeof characteristic.writeValue ===
+            "function"
+        ) {
+
+            await characteristic.writeValue(
+                chunk
+            );
+
+            return;
+
+        }
+
+
+        /*
+         * Fallback.
+         */
+
+        if (
+            typeof characteristic.writeValueWithoutResponse ===
+            "function"
+        ) {
+
+            await characteristic
+                .writeValueWithoutResponse(
+                    chunk
+                );
+
+            return;
+
+        }
+
+
+        if (
+            typeof characteristic.writeValue ===
+            "function"
+        ) {
+
+            await characteristic.writeValue(
+                chunk
+            );
+
+            return;
+
+        }
+
+
+        throw new Error(
+            "Bluetooth: characteristic tidak memiliki fungsi WRITE."
         );
 
     }
@@ -1989,17 +1217,328 @@ const TSPL = (() => {
 
     /*
     =================================================
-     SIMPLE BUILD API
+     WRITE SERIAL CHUNK
     =================================================
     */
 
-    function fromCanvas(
-        canvas,
+    async function writeSerialChunk(
+        chunk
+    ) {
+
+        if (
+            !state.port
+        ) {
+
+            throw new Error(
+                "Bluetooth: Serial port belum tersedia."
+            );
+
+        }
+
+
+        if (
+            !state.port.writable
+        ) {
+
+            throw new Error(
+                "Bluetooth: Serial port tidak writable."
+            );
+
+        }
+
+
+        const writer =
+            state.port.writable.getWriter();
+
+
+        try {
+
+            await writer.write(
+                chunk
+            );
+
+        } finally {
+
+            writer.releaseLock();
+
+        }
+
+    }
+
+
+    /*
+    =================================================
+     WRITE CHUNK
+    =================================================
+    */
+
+    async function writeChunk(
+        chunk,
         options = {}
     ) {
 
-        return buildJob(
-            canvas,
+        if (
+            state.transport ===
+            "ble"
+        ) {
+
+            return await writeBLEChunk(
+                chunk,
+                options
+            );
+
+        }
+
+
+        if (
+            state.transport ===
+            "serial"
+        ) {
+
+            return await writeSerialChunk(
+                chunk
+            );
+
+        }
+
+
+        throw new Error(
+            "Bluetooth: transport tidak tersedia."
+        );
+
+    }
+
+
+    /*
+    =================================================
+     SEND RAW
+    =================================================
+    */
+
+    async function sendRaw(
+        data,
+        options = {}
+    ) {
+
+        if (
+            !state.connected
+        ) {
+
+            throw new Error(
+                "Bluetooth: printer belum terhubung."
+            );
+
+        }
+
+
+        const bytes =
+            toUint8Array(
+                data
+            );
+
+
+        if (
+            bytes.length === 0
+        ) {
+
+            return {
+
+                success: true,
+
+                bytes: 0,
+
+                chunks: 0
+
+            };
+
+        }
+
+
+        const config =
+            getConfig(
+                options
+            );
+
+
+        const chunkSize =
+            Math.max(
+                20,
+                Math.floor(
+                    num(
+                        options.chunkSize,
+                        config.chunkSize
+                    )
+                )
+            );
+
+
+        const delay =
+            Math.max(
+                0,
+                num(
+                    options.chunkDelay,
+                    config.chunkDelay
+                )
+            );
+
+
+        let offset = 0;
+
+        let chunks = 0;
+
+
+        const started =
+            performance.now();
+
+
+        while (
+            offset <
+            bytes.length
+        ) {
+
+            const end =
+                Math.min(
+                    offset +
+                    chunkSize,
+                    bytes.length
+                );
+
+
+            const chunk =
+                bytes.slice(
+                    offset,
+                    end
+                );
+
+
+            await writeChunk(
+                chunk,
+                options
+            );
+
+
+            offset =
+                end;
+
+
+            chunks++;
+
+
+            /*
+             * Delay antar chunk.
+             *
+             * Sangat penting untuk printer
+             * BLE yang tidak mampu menerima
+             * burst besar.
+             */
+
+            if (
+                offset <
+                bytes.length &&
+                delay > 0
+            ) {
+
+                await sleep(
+                    delay
+                );
+
+            }
+
+        }
+
+
+        const elapsed =
+            performance.now() -
+            started;
+
+
+        state.lastWriteBytes =
+            bytes.length;
+
+        state.lastWriteTime =
+            elapsed;
+
+
+        const result = {
+
+            success: true,
+
+            bytes:
+                bytes.length,
+
+            chunks,
+
+            elapsed,
+
+            transport:
+                state.transport
+
+        };
+
+
+        emit(
+            "data",
+            result
+        );
+
+
+        return result;
+
+    }
+
+
+    /*
+    =================================================
+     ALIASES
+    =================================================
+    */
+
+    async function send(
+        data,
+        options = {}
+    ) {
+
+        return await sendRaw(
+            data,
+            options
+        );
+
+    }
+
+
+    async function write(
+        data,
+        options = {}
+    ) {
+
+        return await sendRaw(
+            data,
+            options
+        );
+
+    }
+
+
+    async function writeRaw(
+        data,
+        options = {}
+    ) {
+
+        return await sendRaw(
+            data,
+            options
+        );
+
+    }
+
+
+    async function raw(
+        data,
+        options = {}
+    ) {
+
+        return await sendRaw(
+            data,
             options
         );
 
@@ -2008,99 +1547,366 @@ const TSPL = (() => {
 
     /*
     =================================================
-     TEST API
+     CONNECT USER
+    =================================================
+     Compatibility:
+     Printer Manager memanggil:
+     Bluetooth.connectUser()
     =================================================
     */
 
-    function test(
-        canvas,
+    async function connectUser(
         options = {}
     ) {
 
-        const info =
-            inspect(
-                canvas,
+        /*
+         * Jika sudah connected,
+         * langsung return.
+         */
+
+        if (
+            state.connected
+        ) {
+
+            return getStatus();
+
+        }
+
+
+        /*
+         * Default transport:
+         * BLE
+         */
+
+        const transport =
+            String(
+                options.transport ||
+                options.type ||
+                DEFAULTS.preferredTransport
+            ).toLowerCase();
+
+
+        if (
+            transport === "serial" ||
+            transport === "com"
+        ) {
+
+            return await connectSerial(
+                options.port || null,
                 options
             );
 
+        }
 
-        console.group(
-            "SmartPrint TSPL v5.3"
+
+        return await connectBLE(
+            options.device || null,
+            options
         );
 
+    }
 
-        console.log(
-            "Label:",
-            info.label
+
+    /*
+    =================================================
+     CONNECT
+    =================================================
+    */
+
+    async function connect(
+        options = {}
+    ) {
+
+        return await connectUser(
+            options
         );
 
-
-        console.log(
-            "DPI:",
-            info.dpi
-        );
+    }
 
 
-        console.log(
-            "Dots:",
-            info.widthDots,
-            "x",
-            info.heightDots
-        );
+    /*
+    =================================================
+     AUTO CONNECT
+    =================================================
+    */
+
+    async function autoConnect(
+        options = {}
+    ) {
+
+        /*
+         * Web Bluetooth tidak menyediakan
+         * requestDevice tanpa user gesture.
+         *
+         * Kita hanya dapat reconnect device
+         * yang sudah pernah diberikan permission.
+         */
+
+        if (
+            supportedBLE()
+        ) {
+
+            try {
+
+                const devices =
+                    await navigator.bluetooth
+                        .getDevices();
 
 
-        console.log(
-            "Bytes/Row:",
-            info.bytesPerRow
-        );
+                if (
+                    Array.isArray(devices) &&
+                    devices.length
+                ) {
+
+                    /*
+                     * Gunakan device pertama
+                     * yang tersedia.
+                     */
+
+                    const device =
+                        devices[0];
 
 
-        console.log(
-            "Bitmap Bytes:",
-            info.bitmapBytes
-        );
+                    if (
+                        device.gatt
+                    ) {
+
+                        const result =
+                            await connectBLE(
+                                device,
+                                options
+                            );
 
 
-        console.log(
-            "Black:",
-            info.blackPercent
-        );
+                        state.autoConnected =
+                            true;
 
 
-        console.log(
-            "First Black Byte:",
-            info.firstBlackByte
-        );
+                        return result;
+
+                    }
+
+                }
+
+            } catch (error) {
+
+                state.lastError =
+                    error;
+
+                console.warn(
+                    "Bluetooth.autoConnect():",
+                    error
+                );
+
+            }
+
+        }
 
 
-        console.log(
-            "Last Black Byte:",
-            info.lastBlackByte
-        );
+        /*
+         * Tidak ada device yang sudah
+         * mendapat permission.
+         *
+         * Jangan membuka chooser otomatis.
+         */
+
+        return {
+
+            success: false,
+
+            connected: false,
+
+            reason:
+                "NO_PREVIOUSLY_AUTHORIZED_DEVICE"
+
+        };
+
+    }
 
 
-        console.log(
-            "Bitmap HEX:",
-            info.first64BitmapBytes
-        );
+    /*
+    =================================================
+     DISCONNECT
+    =================================================
+    */
+
+    async function disconnect() {
+
+        const oldTransport =
+            state.transport;
 
 
-        console.log(
-            "Job HEX:",
-            info.first64JobBytes
-        );
+        try {
+
+            /*
+             * BLE
+             */
+
+            if (
+                state.device &&
+                state.device.gatt
+            ) {
+
+                try {
+
+                    if (
+                        state.device.gatt.connected
+                    ) {
+
+                        state.device.gatt.disconnect();
+
+                    }
+
+                } catch (error) {}
+
+            }
 
 
-        console.log(
-            "Total Job:",
-            info.totalJobBytes
-        );
+            /*
+             * Serial
+             */
+
+            if (
+                state.port
+            ) {
+
+                try {
+
+                    if (
+                        state.port.readable
+                    ) {
+
+                        try {
+
+                            await state.port.close();
+
+                        } catch (error) {}
+
+                    } else {
+
+                        await state.port.close();
+
+                    }
+
+                } catch (error) {}
+
+            }
+
+        } finally {
+
+            state.connected =
+                false;
+
+            state.connecting =
+                false;
+
+            state.device =
+                null;
+
+            state.server =
+                null;
+
+            state.service =
+                null;
+
+            state.characteristic =
+                null;
+
+            state.port =
+                null;
+
+            state.writer =
+                null;
+
+            state.transport =
+                null;
+
+            state.lastTransport =
+                null;
 
 
-        console.groupEnd();
+            emit(
+                "disconnect",
+                {
+
+                    transport:
+                        oldTransport
+
+                }
+            );
 
 
-        return info;
+            emit(
+                "status",
+                getStatus()
+            );
+
+        }
+
+
+        return true;
+
+    }
+
+
+    /*
+    =================================================
+     CAPABILITIES
+    =================================================
+    */
+
+    function capabilities() {
+
+        return {
+
+            webBluetooth:
+                supportedBLE(),
+
+            webSerial:
+                supportedSerial(),
+
+            connected:
+                state.connected,
+
+            transport:
+                state.transport,
+
+            raw:
+                true,
+
+            chunking:
+                true
+
+        };
+
+    }
+
+
+    /*
+    =================================================
+     DEBUG
+    =================================================
+    */
+
+    function inspect() {
+
+        return {
+
+            version:
+                VERSION,
+
+            defaults:
+                {
+                    ...DEFAULTS
+                },
+
+            state:
+                getStatus(),
+
+            capabilities:
+                capabilities()
+
+        };
 
     }
 
@@ -2119,31 +1925,49 @@ const TSPL = (() => {
         defaults:
             DEFAULTS,
 
-        getConfig,
+        state,
 
-        validateCanvas,
+        on,
 
-        createRaster,
+        off,
 
-        rasterize,
+        getStatus,
 
-        buildHeader,
-
-        buildBitmapPrefix,
-
-        buildPrint,
-
-        buildJob,
-
-        fromCanvas,
+        capabilities,
 
         inspect,
 
-        test,
+        supportedBLE,
+
+        supportedSerial,
+
+        requestBLEDevice,
+
+        requestSerialPort,
+
+        connectBLE,
+
+        connectSerial,
+
+        connectUser,
+
+        connect,
+
+        autoConnect,
+
+        disconnect,
+
+        toUint8Array,
 
         sendRaw,
 
-        print
+        send,
+
+        write,
+
+        writeRaw,
+
+        raw
 
     };
 
@@ -2152,24 +1976,25 @@ const TSPL = (() => {
 
 /*
 =====================================================
- GLOBAL
+ GLOBAL EXPORT
 =====================================================
 */
 
-window.TSPL = TSPL;
+window.Bluetooth =
+    Bluetooth;
 
 
 /*
 =====================================================
- COMPATIBILITY
+ COMPATIBILITY ALIASES
 =====================================================
 */
 
-window.TSPLEngine = TSPL;
+window.BluetoothEngine =
+    Bluetooth;
 
-window.TSPL_ENGINE = TSPL;
-
-window.SmartPrintTSPL = TSPL;
+window.SmartPrintBluetooth =
+    Bluetooth;
 
 
 /*
@@ -2179,13 +2004,39 @@ window.SmartPrintTSPL = TSPL;
 */
 
 console.log(
-    "SmartPrint TSPL Engine v5.3 Ready"
+    "========================================"
 );
 
 console.log(
-    "Target: 100 x 150 mm | 203 DPI | 799 x 1199 dots"
+    "SmartPrint Bluetooth Engine v5.4"
 );
 
 console.log(
-    "Bitmap: RAW Uint8Array | MSB FIRST | Mode 0"
+    "========================================"
+);
+
+console.log(
+    "BLE:",
+    Bluetooth.supportedBLE()
+);
+
+console.log(
+    "Serial:",
+    Bluetooth.supportedSerial()
+);
+
+console.log(
+    "RAW Uint8Array: ENABLED"
+);
+
+console.log(
+    "Chunked Transmission: ENABLED"
+);
+
+console.log(
+    "TSPL: handled by tspl.js"
+);
+
+console.log(
+    "========================================"
 );
