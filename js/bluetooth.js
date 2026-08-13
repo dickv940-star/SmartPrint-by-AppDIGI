@@ -1,2567 +1,2191 @@
 "use strict";
 
 /*
-===========================================================
- SMARTPRINT BLUETOOTH ENGINE v5.4
-===========================================================
+=====================================================
+ SmartPrint TSPL Engine v5.3
+=====================================================
 
- TRANSPORT
- ----------------------------------------------------------
- 1. Bluetooth Classic / Serial COM   ← PRIORITAS
- 2. Web Bluetooth BLE
- 3. Bridge / kompatibilitas future
+ TARGET
+ ----------------------------------------------------
+ Label       : 100 x 150 mm
+ DPI         : 203
+ Canvas      : TIDAK DIUBAH
+ Printer     : TSPL / TSPL2 compatible
 
- KOMPATIBEL DENGAN
- ----------------------------------------------------------
- ✓ PrinterManager v4.1
- ✓ TSPL
- ✓ ESC/POS
- ✓ ZPL
- ✓ CPCL
- ✓ Web Serial API
- ✓ Web Bluetooth API
+ TARGET DOT
+ ----------------------------------------------------
+ Width       : 799 dots
+ Height      : 1199 dots
+ Bytes/Row   : 100 bytes
+ Bitmap      : 119,900 bytes
 
- API UTAMA
- ----------------------------------------------------------
- Bluetooth.connect()
- Bluetooth.connectSerial()
- Bluetooth.connectBLE()
- Bluetooth.autoConnect()
- Bluetooth.disconnect()
- Bluetooth.isConnected()
- Bluetooth.getDeviceName()
- Bluetooth.send()
- Bluetooth.write()
+ BITMAP
+ ----------------------------------------------------
+ Mode        : 0 = OVERWRITE
+ Bit order   : MSB FIRST
+ 1           : BLACK
+ 0           : WHITE
 
- CATATAN PENTING
- ----------------------------------------------------------
- Web Serial requestPort() HARUS dipanggil dari user gesture.
+ COLOR
+ ----------------------------------------------------
+ Background  : WHITE
+ Transparent : WHITE
+ Text        : BLACK
+ Barcode     : BLACK
+ QR          : BLACK
+ Invert      : FALSE
 
- Karena itu:
- ✓ connectSerial()       → untuk tombol Connect
- ✓ autoConnect()         → hanya getPorts(), tanpa picker
- ✗ autoConnect()         → TIDAK requestPort()
+ PRINT
+ ----------------------------------------------------
+ PRINT copies,1
 
-===========================================================
+ COMPATIBILITY
+ ----------------------------------------------------
+ SmartPrint Printer Manager v4.1
+ SmartPrint Bluetooth Engine v5.4
+ Web Bluetooth / Web Serial / Bridge
+
+ IMPORTANT
+ ----------------------------------------------------
+ 1. Canvas asli TIDAK pernah diubah.
+ 2. Bitmap dibuat pada canvas sementara.
+ 3. Bitmap TIDAK di-TextEncoder.
+ 4. Bitmap dikirim sebagai RAW Uint8Array.
+ 5. Header/footer menggunakan ASCII bytes.
+ 6. Tidak ada invert.
+ 7. Transparansi dianggap WHITE.
+ 8. Padding sisi kanan dianggap WHITE.
+ 9. Proteksi full-black.
+=====================================================
 */
 
-(function () {
 
-    "use strict";
+const TSPL = (() => {
 
+    const VERSION = "5.3";
 
-    // =====================================================
-    // CONSTANTS
-    // =====================================================
-
-    const VERSION =
-        "5.4.0";
-
-
-    const SETTINGS_KEY =
-        "SMARTPRINT_BLUETOOTH_SETTINGS";
-
-
-    const TRANSPORT_SERIAL =
-        "serial";
-
-
-    const TRANSPORT_BLE =
-        "ble";
-
-
-    const TRANSPORT_NONE =
-        "none";
-
-
-    // =====================================================
-    // BLE UUID CANDIDATES
-    // =====================================================
 
     /*
-    Banyak printer BLE thermal menggunakan UUID
-    berbeda-beda.
-
-    Kita mencoba beberapa UUID umum.
-
-    Jika printer menggunakan BLE custom UUID,
-    characteristic dapat ditemukan melalui discovery.
+    =================================================
+     DEFAULT CONFIG
+    =================================================
     */
 
-    const BLE_SERVICES = [
+    const DEFAULTS = {
 
-        "0000ffe0-0000-1000-8000-00805f9b34fb",
+        widthMM: 100,
+        heightMM: 150,
 
-        "0000ff00-0000-1000-8000-00805f9b34fb",
+        dpi: 203,
 
-        "000018f0-0000-1000-8000-00805f9b34fb",
+        widthDots: 799,
+        heightDots: 1199,
 
-        "49535343-fe7d-4ae5-8fa9-9fafd205e455",
+        gap: 2,
 
-        "e7810a71-73ae-499d-8c15-faa9aef0c3f2"
+        density: 8,
+        speed: 4,
 
-    ];
+        copies: 1,
 
+        x: 0,
+        y: 0,
 
-    const BLE_CHARACTERISTICS = [
+        bitmapMode: 0,
 
-        "0000ffe1-0000-1000-8000-00805f9b34fb",
+        threshold: 180,
 
-        "0000ff02-0000-1000-8000-00805f9b34fb",
+        invert: false,
 
-        "0000ff01-0000-1000-8000-00805f9b34fb",
+        transparentIsWhite: true,
 
-        "49535343-8841-43f4-a8d4-ecbe34729bb3",
-
-        "49535343-1e4d-4bd9-ba61-23c647249616",
-
-        "e7810a71-73ae-499d-8c15-faa9aef0c3f3"
-
-    ];
-
-
-    // =====================================================
-    // ENGINE
-    // =====================================================
-
-    const Bluetooth = {
-
-
-        // =================================================
-        // VERSION
-        // =================================================
-
-        version:
-            VERSION,
-
-
-        // =================================================
-        // CAPABILITIES
-        // =================================================
-
-        capabilities: {
-
-            bluetooth:
-                "bluetooth" in navigator,
-
-            serial:
-                "serial" in navigator,
-
-            bridge:
-                true
-
-        },
-
-
-        // =================================================
-        // STATE
-        // =================================================
-
-        connected:
-            false,
-
-
-        connecting:
-            false,
-
-
-        transport:
-            TRANSPORT_NONE,
-
-
-        device:
-            null,
-
-
-        port:
-            null,
-
-
-        characteristic:
-            null,
-
-
-        server:
-            null,
-
-
-        service:
-            null,
-
-
-        writer:
-            null,
-
-
-        deviceName:
-            "",
-
-
-        serialConnected:
-            false,
-
-
-        bleConnected:
-            false,
-
-
-        initialized:
-            false,
-
-
-        lastError:
-            null,
-
-
-        // =================================================
-        // INIT
-        // =================================================
-
-        init() {
-
-            if (
-                this.initialized
-            ) {
-
-                return true;
-
-            }
-
-
-            console.log(
-                "========================================"
-            );
-
-            console.log(
-                "SmartPrint Bluetooth Engine v5.4"
-            );
-
-            console.log(
-                "========================================"
-            );
-
-            console.log(
-                "Transport: BLE + Serial + Classic Bridge"
-            );
-
-            console.log(
-                "Capabilities:",
-                this.capabilities
-            );
-
-
-            this.loadSettings();
-
-
-            this.initialized =
-                true;
-
-
-            /*
-            Listener untuk BLE disconnect.
-            */
-
-            this.setupBLEListeners();
-
-
-            return true;
-
-        },
-
-
-        // =================================================
-        // SETUP BLE LISTENER
-        // =================================================
-
-        setupBLEListeners() {
-
-            /*
-            Listener dipasang ketika device sudah tersedia.
-            */
-
-        },
-
-
-        // =================================================
-        // CONNECT
-        // =================================================
-
-        async connect() {
-
-            if (
-                this.connecting
-            ) {
-
-                console.warn(
-                    "Bluetooth sedang connecting."
-                );
-
-                return false;
-
-            }
-
-
-            this.connecting =
-                true;
-
-
-            this.lastError =
-                null;
-
-
-            console.log(
-                "========================================"
-            );
-
-            console.log(
-                "SMARTPRINT BLUETOOTH USER CONNECT v5.4"
-            );
-
-            console.log(
-                "========================================"
-            );
-
-
-            try {
-
-                /*
-                =================================================
-                PRIORITAS 1
-                SERIAL / BLUETOOTH CLASSIC
-                =================================================
-
-                Untuk printer Bluetooth Classic yang muncul
-                sebagai COM di Windows.
-
-                requestPort() dipanggil dari tombol user.
-                */
-
-                if (
-                    this.capabilities.serial
-                ) {
-
-                    console.log(
-                        "User Connect → Bluetooth Classic / Serial"
-                    );
-
-
-                    const serialResult =
-                        await this.connectSerial();
-
-
-                    if (
-                        serialResult
-                    ) {
-
-                        console.log(
-                            "Bluetooth Classic / Serial Connected"
-                        );
-
-                        return true;
-
-                    }
-
-                }
-
-
-                /*
-                =================================================
-                PRIORITAS 2
-                BLE
-                =================================================
-
-                Hanya dicoba jika Serial gagal.
-                */
-
-                if (
-                    this.capabilities.bluetooth
-                ) {
-
-                    console.log(
-                        "Serial gagal → mencoba BLE"
-                    );
-
-
-                    const bleResult =
-                        await this.connectBLE();
-
-
-                    if (
-                        bleResult
-                    ) {
-
-                        return true;
-
-                    }
-
-                }
-
-
-                throw new Error(
-                    "Tidak ada transport Bluetooth yang berhasil."
-                );
-
-            }
-
-            catch (error) {
-
-                this.lastError =
-                    error;
-
-
-                console.error(
-                    "Bluetooth Connect Error:",
-                    error
-                );
-
-
-                this.connected =
-                    false;
-
-
-                return false;
-
-            }
-
-            finally {
-
-                this.connecting =
-                    false;
-
-            }
-
-        },
-
-
-        // =================================================
-        // SERIAL CONNECT
-        // =================================================
-
-        async connectSerial() {
-
-            if (
-                !this.capabilities.serial
-            ) {
-
-                console.warn(
-                    "Web Serial tidak tersedia."
-                );
-
-                return false;
-
-            }
-
-
-            /*
-            Jangan menjalankan connectSerial dua kali.
-            */
-
-            if (
-                this.serialConnected &&
-                this.port
-            ) {
-
-                console.log(
-                    "Serial sudah terhubung."
-                );
-
-                return true;
-
-            }
-
-
-            try {
-
-                console.log(
-                    "========================================"
-                );
-
-                console.log(
-                    "SMARTPRINT SERIAL CONNECT v5.4"
-                );
-
-                console.log(
-                    "========================================"
-                );
-
-
-                let port =
-                    null;
-
-
-                /*
-                =================================================
-                STEP 1
-                CARI PORT YANG SUDAH DIBERI PERMISSION
-                =================================================
-                */
-
-                try {
-
-                    const ports =
-                        await navigator.serial.getPorts();
-
-
-                    if (
-                        ports &&
-                        ports.length
-                    ) {
-
-                        /*
-                        Gunakan port pertama yang sudah
-                        mendapat permission.
-
-                        Ini TIDAK membutuhkan user gesture.
-                        */
-
-                        port =
-                            ports[0];
-
-
-                        console.log(
-                            "Saved Serial Port ditemukan."
-                        );
-
-                    }
-
-                }
-
-                catch (error) {
-
-                    console.warn(
-                        "getPorts() gagal:",
-                        error
-                    );
-
-                }
-
-
-                /*
-                =================================================
-                STEP 2
-                REQUEST PORT
-                =================================================
-
-                Ini hanya boleh dilakukan dari klik user.
-
-                Jika user membatalkan picker,
-                kita return false dengan aman.
-                */
-
-                if (
-                    !port
-                ) {
-
-                    console.log(
-                        "Membuka Serial Port Picker..."
-                    );
-
-
-                    try {
-
-                        port =
-                            await navigator.serial.requestPort();
-
-                    }
-
-                    catch (error) {
-
-                        if (
-                            error &&
-                            (
-                                error.name ===
-                                "NotFoundError" ||
-                                error.name ===
-                                "AbortError"
-                            )
-                        ) {
-
-                            console.warn(
-                                "Serial Port picker dibatalkan."
-                            );
-
-                            return false;
-
-                        }
-
-
-                        throw error;
-
-                    }
-
-                }
-
-
-                if (
-                    !port
-                ) {
-
-                    return false;
-
-                }
-
-
-                /*
-                =================================================
-                STEP 3
-                OPEN PORT
-                =================================================
-                */
-
-                if (
-                    !port.readable ||
-                    !port.writable
-                ) {
-
-                    try {
-
-                        await port.open({
-
-                            baudRate:
-                                9600,
-
-                            dataBits:
-                                8,
-
-                            stopBits:
-                                1,
-
-                            parity:
-                                "none",
-
-                            flowControl:
-                                "none"
-
-                        });
-
-                    }
-
-                    catch (openError) {
-
-                        /*
-                        Beberapa printer COM mungkin
-                        membutuhkan baud rate berbeda.
-
-                        Coba 115200 sebagai fallback.
-                        */
-
-                        console.warn(
-                            "Open 9600 gagal, mencoba 115200...",
-                            openError
-                        );
-
-
-                        try {
-
-                            await port.open({
-
-                                baudRate:
-                                    115200,
-
-                                dataBits:
-                                    8,
-
-                                stopBits:
-                                    1,
-
-                                parity:
-                                    "none",
-
-                                flowControl:
-                                    "none"
-
-                            });
-
-                        }
-
-                        catch (secondError) {
-
-                            console.error(
-                                "Serial Port gagal dibuka:",
-                                secondError
-                            );
-
-                            return false;
-
-                        }
-
-                    }
-
-                }
-
-
-                /*
-                =================================================
-                SAVE
-                =================================================
-                */
-
-                this.port =
-                    port;
-
-
-                this.transport =
-                    TRANSPORT_SERIAL;
-
-
-                this.serialConnected =
-                    true;
-
-
-                this.bleConnected =
-                    false;
-
-
-                this.connected =
-                    true;
-
-
-                this.device =
-                    null;
-
-
-                this.writer =
-                    null;
-
-
-                /*
-                Device name Web Serial biasanya tidak
-                tersedia secara langsung.
-
-                Berikan nama generic terlebih dahulu.
-                */
-
-                this.deviceName =
-                    this.getSerialPortName(
-                        port
-                    );
-
-
-                this.saveSettings();
-
-
-                console.log(
-                    "========================================"
-                );
-
-                console.log(
-                    "SMARTPRINT SERIAL CONNECTED"
-                );
-
-                console.log(
-                    "Port:",
-                    this.deviceName
-                );
-
-                console.log(
-                    "Transport:",
-                    this.transport
-                );
-
-                console.log(
-                    "========================================"
-                );
-
-
-                return true;
-
-            }
-
-            catch (error) {
-
-                this.lastError =
-                    error;
-
-
-                console.error(
-                    "Serial Connect Error:",
-                    error
-                );
-
-
-                this.serialConnected =
-                    false;
-
-
-                this.connected =
-                    false;
-
-
-                this.port =
-                    null;
-
-
-                return false;
-
-            }
-
-        },
-
-
-        // =================================================
-        // SERIAL PORT NAME
-        // =================================================
-
-        getSerialPortName(port) {
-
-            try {
-
-                if (
-                    !port
-                ) {
-
-                    return "Bluetooth Serial";
-
-                }
-
-
-                /*
-                Web Serial tidak selalu memberikan
-                nama COM port.
-
-                getInfo() bisa memberikan USB VID/PID,
-                tetapi Bluetooth Classic kadang kosong.
-                */
-
-                if (
-                    typeof port.getInfo ===
-                    "function"
-                ) {
-
-                    const info =
-                        port.getInfo();
-
-
-                    if (
-                        info &&
-                        (
-                            info.usbVendorId ||
-                            info.usbProductId
-                        )
-                    ) {
-
-                        return (
-                            "Bluetooth Serial " +
-                            (
-                                info.usbVendorId
-                                    ? "VID:" +
-                                      info.usbVendorId
-                                    : ""
-                            ) +
-                            (
-                                info.usbProductId
-                                    ? " PID:" +
-                                      info.usbProductId
-                                    : ""
-                            )
-                        );
-
-                    }
-
-                }
-
-            }
-
-            catch (error) {
-
-                console.warn(
-                    "Serial info tidak tersedia:",
-                    error
-                );
-
-            }
-
-
-            return "Bluetooth Serial";
-
-        },
-
-
-        // =================================================
-        // BLE CONNECT
-        // =================================================
-
-        async connectBLE() {
-
-            if (
-                !this.capabilities.bluetooth
-            ) {
-
-                console.warn(
-                    "Web Bluetooth tidak tersedia."
-                );
-
-                return false;
-
-            }
-
-
-            if (
-                this.bleConnected &&
-                this.device
-            ) {
-
-                return true;
-
-            }
-
-
-            try {
-
-                console.log(
-                    "========================================"
-                );
-
-                console.log(
-                    "SMARTPRINT BLE CONNECT v5.4"
-                );
-
-                console.log(
-                    "========================================"
-                );
-
-
-                /*
-                =================================================
-                REQUEST DEVICE
-                =================================================
-
-                acceptAllDevices digunakan agar printer
-                thermal BLE yang tidak memiliki nama/service
-                standar tetap dapat muncul.
-
-                Ini berbeda dari versi lama yang terlalu
-                ketat menggunakan filter.
-                */
-
-                const optionalServices =
-                    [
-                        ...BLE_SERVICES
-                    ];
-
-
-                const device =
-                    await navigator.bluetooth.requestDevice({
-
-                        acceptAllDevices:
-                            true,
-
-                        optionalServices:
-                            optionalServices
-
-                    });
-
-
-                if (
-                    !device
-                ) {
-
-                    console.warn(
-                        "Tidak ada BLE device."
-                    );
-
-                    return false;
-
-                }
-
-
-                this.device =
-                    device;
-
-
-                this.deviceName =
-                    device.name ||
-                    "Bluetooth BLE Printer";
-
-
-                console.log(
-                    "BLE Device:",
-                    this.deviceName
-                );
-
-
-                /*
-                =================================================
-                DEVICE DISCONNECT
-                =================================================
-                */
-
-                if (
-                    typeof device.addEventListener ===
-                    "function"
-                ) {
-
-                    device.addEventListener(
-                        "gattserverdisconnected",
-                        () => {
-
-                            console.warn(
-                                "BLE device disconnected."
-                            );
-
-
-                            this.bleConnected =
-                                false;
-
-
-                            if (
-                                this.transport ===
-                                TRANSPORT_BLE
-                            ) {
-
-                                this.connected =
-                                    false;
-
-                            }
-
-                        }
-                    );
-
-                }
-
-
-                /*
-                =================================================
-                CONNECT GATT
-                =================================================
-                */
-
-                if (
-                    !device.gatt
-                ) {
-
-                    throw new Error(
-                        "BLE GATT tidak tersedia."
-                    );
-
-                }
-
-
-                this.server =
-                    await device.gatt.connect();
-
-
-                /*
-                =================================================
-                DISCOVER CHARACTERISTIC
-                =================================================
-                */
-
-                const found =
-                    await this.findBLECharacteristic();
-
-
-                if (
-                    !found
-                ) {
-
-                    throw new Error(
-                        "BLE printer terdeteksi tetapi write characteristic tidak ditemukan."
-                    );
-
-                }
-
-
-                this.transport =
-                    TRANSPORT_BLE;
-
-
-                this.bleConnected =
-                    true;
-
-
-                this.serialConnected =
-                    false;
-
-
-                this.connected =
-                    true;
-
-
-                this.saveSettings();
-
-
-                console.log(
-                    "========================================"
-                );
-
-                console.log(
-                    "SMARTPRINT BLE CONNECTED"
-                );
-
-                console.log(
-                    "Device:",
-                    this.deviceName
-                );
-
-                console.log(
-                    "Transport:",
-                    this.transport
-                );
-
-                console.log(
-                    "========================================"
-                );
-
-
-                return true;
-
-            }
-
-            catch (error) {
-
-                this.lastError =
-                    error;
-
-
-                if (
-                    error &&
-                    (
-                        error.name ===
-                        "NotFoundError" ||
-                        error.name ===
-                        "AbortError"
-                    )
-                ) {
-
-                    console.warn(
-                        "BLE device picker dibatalkan."
-                    );
-
-                }
-
-                else {
-
-                    console.error(
-                        "BLE Connect Error:",
-                        error
-                    );
-
-                }
-
-
-                this.bleConnected =
-                    false;
-
-
-                /*
-                Jangan memutus Serial yang sudah
-                berhasil sebelumnya.
-                */
-
-                if (
-                    !this.serialConnected
-                ) {
-
-                    this.connected =
-                        false;
-
-                }
-
-
-                return false;
-
-            }
-
-        },
-
-
-        // =================================================
-        // FIND BLE CHARACTERISTIC
-        // =================================================
-
-        async findBLECharacteristic() {
-
-            if (
-                !this.server
-            ) {
-
-                return false;
-
-            }
-
-
-            /*
-            =================================================
-            COBA SERVICE UUID YANG DIKENAL
-            =================================================
-            */
-
-            for (
-                const serviceUUID of BLE_SERVICES
-            ) {
-
-                try {
-
-                    const service =
-                        await this.server.getPrimaryService(
-                            serviceUUID
-                        );
-
-
-                    if (
-                        !service
-                    ) {
-
-                        continue;
-
-                    }
-
-
-                    this.service =
-                        service;
-
-
-                    console.log(
-                        "BLE Service ditemukan:",
-                        serviceUUID
-                    );
-
-
-                    /*
-                    -----------------------------------------
-                    COBA CHARACTERISTIC UUID YANG DIKENAL
-                    -----------------------------------------
-                    */
-
-                    for (
-                        const charUUID of
-                        BLE_CHARACTERISTICS
-                    ) {
-
-                        try {
-
-                            const characteristic =
-                                await service.getCharacteristic(
-                                    charUUID
-                                );
-
-
-                            if (
-                                characteristic &&
-                                this.canWriteCharacteristic(
-                                    characteristic
-                                )
-                            ) {
-
-                                this.characteristic =
-                                    characteristic;
-
-
-                                console.log(
-                                    "BLE Write Characteristic:",
-                                    charUUID
-                                );
-
-
-                                return true;
-
-                            }
-
-                        }
-
-                        catch (error) {
-
-                            /*
-                            Characteristic tidak ada.
-                            Lanjutkan pencarian.
-                            */
-
-                        }
-
-                    }
-
-
-                    /*
-                    -----------------------------------------
-                    DISCOVER SEMUA CHARACTERISTIC
-                    -----------------------------------------
-                    */
-
-                    try {
-
-                        const characteristics =
-                            await service.getCharacteristics();
-
-
-                        for (
-                            const characteristic
-                            of characteristics
-                        ) {
-
-                            if (
-                                this.canWriteCharacteristic(
-                                    characteristic
-                                )
-                            ) {
-
-                                this.characteristic =
-                                    characteristic;
-
-
-                                console.log(
-                                    "BLE Write Characteristic ditemukan melalui discovery."
-                                );
-
-
-                                return true;
-
-                            }
-
-                        }
-
-                    }
-
-                    catch (error) {
-
-                        console.warn(
-                            "BLE characteristic discovery gagal:",
-                            error
-                        );
-
-                    }
-
-                }
-
-                catch (error) {
-
-                    /*
-                    Service tidak ditemukan.
-                    Lanjutkan UUID berikutnya.
-                    */
-
-                }
-
-            }
-
-
-            /*
-            =================================================
-            FALLBACK
-            =================================================
-
-            Ambil semua primary services yang diizinkan.
-            */
-
-            try {
-
-                const services =
-                    await this.server.getPrimaryServices();
-
-
-                for (
-                    const service
-                    of services
-                ) {
-
-                    try {
-
-                        const characteristics =
-                            await service.getCharacteristics();
-
-
-                        for (
-                            const characteristic
-                            of characteristics
-                        ) {
-
-                            if (
-                                this.canWriteCharacteristic(
-                                    characteristic
-                                )
-                            ) {
-
-                                this.service =
-                                    service;
-
-
-                                this.characteristic =
-                                    characteristic;
-
-
-                                console.log(
-                                    "BLE characteristic fallback ditemukan."
-                                );
-
-
-                                return true;
-
-                            }
-
-                        }
-
-                    }
-
-                    catch (error) {
-
-                        // continue
-
-                    }
-
-                }
-
-            }
-
-            catch (error) {
-
-                console.warn(
-                    "BLE fallback discovery gagal:",
-                    error
-                );
-
-            }
-
-
-            return false;
-
-        },
-
-
-        // =================================================
-        // CAN WRITE CHARACTERISTIC
-        // =================================================
-
-        canWriteCharacteristic(
-            characteristic
-        ) {
-
-            if (
-                !characteristic
-            ) {
-
-                return false;
-
-            }
-
-
-            const properties =
-                characteristic.properties ||
-                {};
-
-
-            return Boolean(
-
-                properties.write ||
-                properties.writeWithoutResponse
-
-            );
-
-        },
-
-
-        // =================================================
-        // AUTO CONNECT
-        // =================================================
-
-        async autoConnect() {
-
-            /*
-            =================================================
-            PENTING
-
-            Fungsi ini TIDAK boleh menggunakan:
-
-                navigator.serial.requestPort()
-
-            karena autoConnect bukan user gesture.
-
-            Kita hanya mencari port yang sebelumnya
-            sudah diberi permission.
-            =================================================
-            */
-
-            console.log(
-                "SmartPrint Bluetooth Auto Connect..."
-            );
-
-
-            /*
-            =================================================
-            SERIAL AUTO CONNECT
-            =================================================
-            */
-
-            if (
-                this.capabilities.serial
-            ) {
-
-                try {
-
-                    const ports =
-                        await navigator.serial.getPorts();
-
-
-                    if (
-                        ports &&
-                        ports.length
-                    ) {
-
-                        console.log(
-                            "Saved Serial printer ditemukan."
-                        );
-
-
-                        const port =
-                            ports[0];
-
-
-                        this.port =
-                            port;
-
-
-                        /*
-                        Port mungkin masih terbuka.
-                        */
-
-                        if (
-                            !port.readable ||
-                            !port.writable
-                        ) {
-
-                            try {
-
-                                await port.open({
-
-                                    baudRate:
-                                        9600,
-
-                                    dataBits:
-                                        8,
-
-                                    stopBits:
-                                        1,
-
-                                    parity:
-                                        "none",
-
-                                    flowControl:
-                                        "none"
-
-                                });
-
-                            }
-
-                            catch (error) {
-
-                                console.warn(
-                                    "Serial auto open gagal:",
-                                    error
-                                );
-
-                                return false;
-
-                            }
-
-                        }
-
-
-                        this.transport =
-                            TRANSPORT_SERIAL;
-
-
-                        this.serialConnected =
-                            true;
-
-
-                        this.bleConnected =
-                            false;
-
-
-                        this.connected =
-                            true;
-
-
-                        this.deviceName =
-                            this.getSerialPortName(
-                                port
-                            );
-
-
-                        console.log(
-                            "Serial Auto Connected:",
-                            this.deviceName
-                        );
-
-
-                        return true;
-
-                    }
-
-                }
-
-                catch (error) {
-
-                    console.warn(
-                        "Serial auto-connect gagal:",
-                        error
-                    );
-
-                }
-
-            }
-
-
-            /*
-            =================================================
-            BLE AUTO CONNECT
-            =================================================
-
-            Web Bluetooth device yang sudah pernah
-            dipair dapat dicari menggunakan getDevices()
-            pada browser yang mendukungnya.
-
-            Tidak semua Chrome environment mendukung.
-            */
-
-            if (
-                this.capabilities.bluetooth &&
-                navigator.bluetooth &&
-                typeof navigator.bluetooth.getDevices ===
-                "function"
-            ) {
-
-                try {
-
-                    const devices =
-                        await navigator.bluetooth.getDevices();
-
-
-                    if (
-                        devices &&
-                        devices.length
-                    ) {
-
-                        for (
-                            const device
-                            of devices
-                        ) {
-
-                            try {
-
-                                if (
-                                    !device.gatt
-                                ) {
-
-                                    continue;
-
-                                }
-
-
-                                this.device =
-                                    device;
-
-
-                                this.deviceName =
-                                    device.name ||
-                                    "Bluetooth BLE Printer";
-
-
-                                this.server =
-                                    await device.gatt.connect();
-
-
-                                const found =
-                                    await this.findBLECharacteristic();
-
-
-                                if (
-                                    found
-                                ) {
-
-                                    this.transport =
-                                        TRANSPORT_BLE;
-
-
-                                    this.bleConnected =
-                                        true;
-
-
-                                    this.serialConnected =
-                                        false;
-
-
-                                    this.connected =
-                                        true;
-
-
-                                    console.log(
-                                        "BLE Auto Connected:",
-                                        this.deviceName
-                                    );
-
-
-                                    return true;
-
-                                }
-
-                            }
-
-                            catch (error) {
-
-                                console.warn(
-                                    "BLE auto device gagal:",
-                                    error
-                                );
-
-                            }
-
-                        }
-
-                    }
-
-                }
-
-                catch (error) {
-
-                    console.warn(
-                        "BLE getDevices() gagal:",
-                        error
-                    );
-
-                }
-
-            }
-
-
-            console.log(
-                "Tidak ada printer yang dapat auto-connect."
-            );
-
-
-            return false;
-
-        },
-
-
-        // =================================================
-        // SEND
-        // =================================================
-
-        async send(data) {
-
-            if (
-                !this.isConnected()
-            ) {
-
-                throw new Error(
-                    "Bluetooth belum terhubung."
-                );
-
-            }
-
-
-            if (
-                data ===
-                undefined ||
-                data ===
-                null
-            ) {
-
-                throw new Error(
-                    "Data print kosong."
-                );
-
-            }
-
-
-            /*
-            =================================================
-            NORMALIZE DATA
-            =================================================
-            */
-
-            const bytes =
-                this.toUint8Array(
-                    data
-                );
-
-
-            if (
-                !bytes ||
-                !bytes.length
-            ) {
-
-                throw new Error(
-                    "Data print tidak valid."
-                );
-
-            }
-
-
-            /*
-            =================================================
-            SERIAL
-            =================================================
-            */
-
-            if (
-                this.transport ===
-                TRANSPORT_SERIAL
-            ) {
-
-                return await this.sendSerial(
-                    bytes
-                );
-
-            }
-
-
-            /*
-            =================================================
-            BLE
-            =================================================
-            */
-
-            if (
-                this.transport ===
-                TRANSPORT_BLE
-            ) {
-
-                return await this.sendBLE(
-                    bytes
-                );
-
-            }
-
-
-            throw new Error(
-                "Transport Bluetooth tidak diketahui."
-            );
-
-        },
-
-
-        // =================================================
-        // WRITE ALIAS
-        // =================================================
-
-        async write(data) {
-
-            return await this.send(
-                data
-            );
-
-        },
-
-
-        // =================================================
-        // SEND SERIAL
-        // =================================================
-
-        async sendSerial(bytes) {
-
-            if (
-                !this.port
-            ) {
-
-                throw new Error(
-                    "Serial port tidak tersedia."
-                );
-
-            }
-
-
-            if (
-                !this.port.writable
-            ) {
-
-                throw new Error(
-                    "Serial port tidak writable."
-                );
-
-            }
-
-
-            let writer =
-                null;
-
-
-            try {
-
-                writer =
-                    this.port.writable.getWriter();
-
-
-                /*
-                Web Serial dapat menerima Uint8Array
-                secara langsung.
-                */
-
-                await writer.write(
-                    bytes
-                );
-
-
-                console.log(
-                    "Serial data sent:",
-                    bytes.length,
-                    "bytes"
-                );
-
-
-                return true;
-
-            }
-
-            finally {
-
-                if (
-                    writer
-                ) {
-
-                    try {
-
-                        writer.releaseLock();
-
-                    }
-
-                    catch (error) {
-
-                        // ignore
-
-                    }
-
-                }
-
-            }
-
-        },
-
-
-        // =================================================
-        // SEND BLE
-        // =================================================
-
-        async sendBLE(bytes) {
-
-            if (
-                !this.characteristic
-            ) {
-
-                throw new Error(
-                    "BLE write characteristic tidak tersedia."
-                );
-
-            }
-
-
-            /*
-            BLE memiliki ukuran paket terbatas.
-
-            Kita kirim secara chunk.
-            */
-
-            const characteristic =
-                this.characteristic;
-
-
-            const useWithoutResponse =
-                Boolean(
-                    characteristic.properties &&
-                    characteristic.properties.writeWithoutResponse &&
-                    !characteristic.properties.write
-                );
-
-
-            /*
-            MTU aman untuk sebagian besar printer BLE.
-            */
-
-            const chunkSize =
-                180;
-
-
-            for (
-                let offset = 0;
-                offset < bytes.length;
-                offset += chunkSize
-            ) {
-
-                const chunk =
-                    bytes.slice(
-                        offset,
-                        Math.min(
-                            offset +
-                            chunkSize,
-                            bytes.length
-                        )
-                    );
-
-
-                if (
-                    useWithoutResponse &&
-                    typeof characteristic.writeValueWithoutResponse ===
-                    "function"
-                ) {
-
-                    await characteristic.writeValueWithoutResponse(
-                        chunk
-                    );
-
-                }
-
-                else if (
-                    typeof characteristic.writeValueWithoutResponse ===
-                    "function" &&
-                    characteristic.properties &&
-                    characteristic.properties.writeWithoutResponse
-                ) {
-
-                    await characteristic.writeValueWithoutResponse(
-                        chunk
-                    );
-
-                }
-
-                else {
-
-                    await characteristic.writeValue(
-                        chunk
-                    );
-
-                }
-
-
-                /*
-                Beri jeda kecil agar printer BLE tidak
-                overflow buffer.
-                */
-
-                if (
-                    offset + chunkSize <
-                    bytes.length
-                ) {
-
-                    await this.sleep(
-                        5
-                    );
-
-                }
-
-            }
-
-
-            console.log(
-                "BLE data sent:",
-                bytes.length,
-                "bytes"
-            );
-
-
-            return true;
-
-        },
-
-
-        // =================================================
-        // TO UINT8 ARRAY
-        // =================================================
-
-        toUint8Array(data) {
-
-            /*
-            Uint8Array
-            */
-
-            if (
-                data instanceof Uint8Array
-            ) {
-
-                return data;
-
-            }
-
-
-            /*
-            ArrayBuffer
-            */
-
-            if (
-                data instanceof ArrayBuffer
-            ) {
-
-                return new Uint8Array(
-                    data
-                );
-
-            }
-
-
-            /*
-            DataView
-            */
-
-            if (
-                data instanceof DataView
-            ) {
-
-                return new Uint8Array(
-                    data.buffer,
-                    data.byteOffset,
-                    data.byteLength
-                );
-
-            }
-
-
-            /*
-            Array number
-            */
-
-            if (
-                Array.isArray(data)
-            ) {
-
-                return new Uint8Array(
-                    data
-                );
-
-            }
-
-
-            /*
-            String
-            */
-
-            if (
-                typeof data ===
-                "string"
-            ) {
-
-                return new TextEncoder().encode(
-                    data
-                );
-
-            }
-
-
-            throw new Error(
-                "Format data Bluetooth tidak didukung."
-            );
-
-        },
-
-
-        // =================================================
-        // IS CONNECTED
-        // =================================================
-
-        isConnected() {
-
-            /*
-            SERIAL
-            */
-
-            if (
-                this.transport ===
-                TRANSPORT_SERIAL
-            ) {
-
-                this.connected =
-                    Boolean(
-                        this.port &&
-                        this.serialConnected
-                    );
-
-
-                return this.connected;
-
-            }
-
-
-            /*
-            BLE
-            */
-
-            if (
-                this.transport ===
-                TRANSPORT_BLE
-            ) {
-
-                const gattConnected =
-                    Boolean(
-                        this.device &&
-                        this.device.gatt &&
-                        this.device.gatt.connected
-                    );
-
-
-                this.connected =
-                    Boolean(
-                        this.bleConnected &&
-                        gattConnected
-                    );
-
-
-                return this.connected;
-
-            }
-
-
-            return false;
-
-        },
-
-
-        // =================================================
-        // GET DEVICE NAME
-        // =================================================
-
-        getDeviceName() {
-
-            return (
-                this.deviceName ||
-                (
-                    this.transport ===
-                    TRANSPORT_SERIAL
-                        ? "Bluetooth Serial"
-                        : ""
-                )
-            );
-
-        },
-
-
-        // =================================================
-        // GET TRANSPORT
-        // =================================================
-
-        getTransport() {
-
-            return this.transport;
-
-        },
-
-
-        // =================================================
-        // GET STATUS
-        // =================================================
-
-        getStatus() {
-
-            return {
-
-                connected:
-                    this.isConnected(),
-
-                connecting:
-                    this.connecting,
-
-                transport:
-                    this.transport,
-
-                deviceName:
-                    this.getDeviceName(),
-
-                serial:
-                    this.serialConnected,
-
-                ble:
-                    this.bleConnected,
-
-                capabilities:
-                    {
-                        ...this.capabilities
-                    },
-
-                error:
-                    this.lastError
-
-            };
-
-        },
-
-
-        // =================================================
-        // DISCONNECT
-        // =================================================
-
-        async disconnect() {
-
-            console.log(
-                "SmartPrint Bluetooth Disconnect..."
-            );
-
-
-            /*
-            =================================================
-            SERIAL
-            =================================================
-            */
-
-            if (
-                this.port
-            ) {
-
-                try {
-
-                    if (
-                        this.port.readable ||
-                        this.port.writable
-                    ) {
-
-                        await this.port.close();
-
-                    }
-
-                }
-
-                catch (error) {
-
-                    console.warn(
-                        "Serial close error:",
-                        error
-                    );
-
-                }
-
-            }
-
-
-            /*
-            =================================================
-            BLE
-            =================================================
-            */
-
-            if (
-                this.device &&
-                this.device.gatt
-            ) {
-
-                try {
-
-                    if (
-                        this.device.gatt.connected
-                    ) {
-
-                        this.device.gatt.disconnect();
-
-                    }
-
-                }
-
-                catch (error) {
-
-                    console.warn(
-                        "BLE disconnect error:",
-                        error
-                    );
-
-                }
-
-            }
-
-
-            /*
-            =================================================
-            RESET STATE
-            =================================================
-            */
-
-            this.port =
-                null;
-
-
-            this.device =
-                null;
-
-
-            this.server =
-                null;
-
-
-            this.service =
-                null;
-
-
-            this.characteristic =
-                null;
-
-
-            this.writer =
-                null;
-
-
-            this.connected =
-                false;
-
-
-            this.serialConnected =
-                false;
-
-
-            this.bleConnected =
-                false;
-
-
-            this.transport =
-                TRANSPORT_NONE;
-
-
-            console.log(
-                "Bluetooth Disconnected."
-            );
-
-
-            return true;
-
-        },
-
-
-        // =================================================
-        // SAVE SETTINGS
-        // =================================================
-
-        saveSettings() {
-
-            try {
-
-                localStorage.setItem(
-
-                    SETTINGS_KEY,
-
-                    JSON.stringify({
-
-                        transport:
-                            this.transport,
-
-                        deviceName:
-                            this.deviceName
-
-                    })
-
-                );
-
-            }
-
-            catch (error) {
-
-                console.warn(
-                    "Bluetooth settings gagal disimpan:",
-                    error
-                );
-
-            }
-
-        },
-
-
-        // =================================================
-        // LOAD SETTINGS
-        // =================================================
-
-        loadSettings() {
-
-            try {
-
-                const raw =
-                    localStorage.getItem(
-                        SETTINGS_KEY
-                    );
-
-
-                if (
-                    !raw
-                ) {
-
-                    return;
-
-                }
-
-
-                const settings =
-                    JSON.parse(
-                        raw
-                    );
-
-
-                if (
-                    settings.deviceName
-                ) {
-
-                    this.deviceName =
-                        settings.deviceName;
-
-                }
-
-                /*
-                Transport tidak langsung dipakai untuk
-                koneksi otomatis karena port/device harus
-                diverifikasi terlebih dahulu.
-                */
-
-            }
-
-            catch (error) {
-
-                console.warn(
-                    "Bluetooth settings gagal dibaca:",
-                    error
-                );
-
-            }
-
-        },
-
-
-        // =================================================
-        // SLEEP
-        // =================================================
-
-        sleep(ms) {
-
-            return new Promise(
-                resolve =>
-                    setTimeout(
-                        resolve,
-                        ms
-                    )
-            );
-
-        }
+        debug: true
 
     };
 
 
-    // =====================================================
-    // GLOBAL
-    // =====================================================
+    /*
+    =================================================
+     BASIC HELPERS
+    =================================================
+    */
 
-    window.Bluetooth =
-        Bluetooth;
+    function num(value, fallback = 0) {
 
+        const n = Number(value);
 
-    window.SmartPrintBluetooth =
-        Bluetooth;
+        return Number.isFinite(n)
+            ? n
+            : fallback;
 
-
-    // =====================================================
-    // INIT
-    // =====================================================
-
-    Bluetooth.init();
+    }
 
 
-    // =====================================================
-    // LOG
-    // =====================================================
+    function int(value, fallback = 0) {
 
-    console.log(
-        "========================================"
-    );
+        const n = parseInt(
+            value,
+            10
+        );
 
-    console.log(
-        "SmartPrint Bluetooth Engine v5.4 Ready"
-    );
+        return Number.isFinite(n)
+            ? n
+            : fallback;
 
-    console.log(
-        "Transport: BLE + Serial + Classic Bridge"
-    );
+    }
 
-    console.log(
-        "========================================"
-    );
 
+    function clamp(
+        value,
+        min,
+        max
+    ) {
+
+        return Math.max(
+            min,
+            Math.min(max, value)
+        );
+
+    }
+
+
+    function mmToDots(
+        mm,
+        dpi
+    ) {
+
+        return Math.round(
+            num(mm) *
+            num(dpi) /
+            25.4
+        );
+
+    }
+
+
+    /*
+    =================================================
+     GET SETTINGS
+    =================================================
+    */
+
+    function getSettings() {
+
+        /*
+         * SmartPrint Settings object
+         */
+
+        try {
+
+            if (
+                typeof Settings !== "undefined" &&
+                Settings
+            ) {
+
+                return Settings;
+
+            }
+
+        } catch (error) {}
+
+
+        /*
+         * localStorage fallback
+         */
+
+        try {
+
+            const raw =
+                localStorage.getItem(
+                    "SMARTPRINT_SETTINGS"
+                );
+
+
+            if (raw) {
+
+                return JSON.parse(raw);
+
+            }
+
+        } catch (error) {}
+
+
+        return {};
+
+    }
+
+
+    /*
+    =================================================
+     FIND PRINTER SETTINGS
+    =================================================
+    */
+
+    function getPrinterSettings() {
+
+        const settings =
+            getSettings();
+
+
+        return (
+            settings.printer ||
+            settings.Printer ||
+            settings
+        );
+
+    }
+
+
+    /*
+    =================================================
+     FIND LABEL SETTINGS
+    =================================================
+    */
+
+    function getLabelSettings() {
+
+        const settings =
+            getSettings();
+
+
+        return (
+            settings.label ||
+            settings.Label ||
+            settings
+        );
+
+    }
+
+
+    /*
+    =================================================
+     BUILD CONFIG
+    =================================================
+    */
+
+    function getConfig(
+        options = {}
+    ) {
+
+        const settings =
+            getSettings();
+
+
+        const printer =
+            getPrinterSettings();
+
+
+        const label =
+            getLabelSettings();
+
+
+        /*
+         * DPI
+         */
+
+        const dpi =
+            int(
+                options.dpi ??
+                printer.dpi ??
+                settings.dpi,
+                DEFAULTS.dpi
+            );
+
+
+        /*
+         * FORCE TARGET 100 x 150
+         *
+         * Jika tidak diberikan override,
+         * gunakan target SmartPrint.
+         */
+
+        const widthMM =
+            num(
+                options.widthMM ??
+                label.labelWidth,
+                DEFAULTS.widthMM
+            );
+
+
+        const heightMM =
+            num(
+                options.heightMM ??
+                label.labelHeight,
+                DEFAULTS.heightMM
+            );
+
+
+        /*
+         * Untuk target 100 x 150 @ 203 DPI:
+         *
+         * 100 / 25.4 * 203 = 799.21
+         * 150 / 25.4 * 203 = 1198.82
+         *
+         * => 799 x 1199
+         */
+
+        const widthDots =
+            int(
+                options.widthDots ??
+                (
+                    widthMM === 100 &&
+                    heightMM === 150 &&
+                    dpi === 203
+                        ? 799
+                        : mmToDots(
+                            widthMM,
+                            dpi
+                        )
+                ),
+                DEFAULTS.widthDots
+            );
+
+
+        const heightDots =
+            int(
+                options.heightDots ??
+                (
+                    widthMM === 100 &&
+                    heightMM === 150 &&
+                    dpi === 203
+                        ? 1199
+                        : mmToDots(
+                            heightMM,
+                            dpi
+                        )
+                ),
+                DEFAULTS.heightDots
+            );
+
+
+        /*
+         * GAP
+         */
+
+        const gap =
+            num(
+                options.gap ??
+                label.gap ??
+                printer.gap,
+                DEFAULTS.gap
+            );
+
+
+        /*
+         * DENSITY
+         */
+
+        const density =
+            clamp(
+                int(
+                    options.density ??
+                    printer.density ??
+                    settings.density,
+                    DEFAULTS.density
+                ),
+                0,
+                15
+            );
+
+
+        /*
+         * SPEED
+         */
+
+        const speed =
+            clamp(
+                num(
+                    options.speed ??
+                    printer.speed ??
+                    settings.speed,
+                    DEFAULTS.speed
+                ),
+                1,
+                12
+            );
+
+
+        /*
+         * COPIES
+         */
+
+        const copies =
+            Math.max(
+                1,
+                int(
+                    options.copies ??
+                    printer.copies ??
+                    settings.copies,
+                    DEFAULTS.copies
+                )
+            );
+
+
+        /*
+         * THRESHOLD
+         */
+
+        const threshold =
+            clamp(
+                int(
+                    options.threshold,
+                    DEFAULTS.threshold
+                ),
+                0,
+                255
+            );
+
+
+        return {
+
+            widthMM,
+            heightMM,
+
+            dpi,
+
+            widthDots,
+            heightDots,
+
+            gap,
+
+            density,
+            speed,
+
+            copies,
+
+            x:
+                int(
+                    options.x,
+                    DEFAULTS.x
+                ),
+
+            y:
+                int(
+                    options.y,
+                    DEFAULTS.y
+                ),
+
+            bitmapMode:
+                int(
+                    options.bitmapMode,
+                    DEFAULTS.bitmapMode
+                ),
+
+            threshold,
+
+            /*
+             * IMPORTANT:
+             * v5.3 selalu default FALSE.
+             */
+
+            invert: false,
+
+            transparentIsWhite: true,
+
+            debug:
+                options.debug !== false
+
+        };
+
+    }
+
+
+    /*
+    =================================================
+     VALIDATE CANVAS
+    =================================================
+    */
+
+    function validateCanvas(
+        canvas
+    ) {
+
+        if (!canvas) {
+
+            throw new Error(
+                "TSPL v5.3: previewCanvas tidak ditemukan."
+            );
+
+        }
+
+
+        if (
+            typeof canvas.getContext !==
+            "function"
+        ) {
+
+            throw new Error(
+                "TSPL v5.3: object bukan canvas."
+            );
+
+        }
+
+
+        if (
+            canvas.width <= 0 ||
+            canvas.height <= 0
+        ) {
+
+            throw new Error(
+                "TSPL v5.3: ukuran canvas tidak valid."
+            );
+
+        }
+
+    }
+
+
+    /*
+    =================================================
+     CREATE TEMPORARY RASTER
+    =================================================
+    */
+
+    function createRaster(
+        sourceCanvas,
+        width,
+        height
+    ) {
+
+        let raster;
+
+
+        /*
+         * OffscreenCanvas jika tersedia.
+         */
+
+        if (
+            typeof OffscreenCanvas !==
+            "undefined"
+        ) {
+
+            raster =
+                new OffscreenCanvas(
+                    width,
+                    height
+                );
+
+        } else {
+
+            raster =
+                document.createElement(
+                    "canvas"
+                );
+
+            raster.width =
+                width;
+
+            raster.height =
+                height;
+
+        }
+
+
+        const ctx =
+            raster.getContext(
+                "2d",
+                {
+                    alpha: false,
+                    willReadFrequently: true
+                }
+            );
+
+
+        if (!ctx) {
+
+            throw new Error(
+                "TSPL v5.3: gagal membuat raster context."
+            );
+
+        }
+
+
+        /*
+         * WHITE BACKGROUND
+         *
+         * Ini sangat penting.
+         *
+         * Canvas transparent:
+         *     -> WHITE
+         *
+         * Bukan BLACK.
+         */
+
+        ctx.save();
+
+        ctx.globalCompositeOperation =
+            "source-over";
+
+        ctx.globalAlpha = 1;
+
+        ctx.fillStyle =
+            "#FFFFFF";
+
+        ctx.fillRect(
+            0,
+            0,
+            width,
+            height
+        );
+
+
+        /*
+         * Ambil desain dari canvas.
+         *
+         * Canvas asli hanya dibaca.
+         */
+
+        ctx.globalCompositeOperation =
+            "source-over";
+
+        ctx.globalAlpha = 1;
+
+        ctx.imageSmoothingEnabled =
+            true;
+
+        ctx.imageSmoothingQuality =
+            "high";
+
+
+        ctx.drawImage(
+            sourceCanvas,
+
+            0,
+            0,
+            sourceCanvas.width,
+            sourceCanvas.height,
+
+            0,
+            0,
+            width,
+            height
+        );
+
+
+        ctx.restore();
+
+
+        return raster;
+
+    }
+
+
+    /*
+    =================================================
+     RGB -> GRAYSCALE
+    =================================================
+    */
+
+    function grayscale(
+        r,
+        g,
+        b
+    ) {
+
+        return (
+            0.299 * r +
+            0.587 * g +
+            0.114 * b
+        );
+
+    }
+
+
+    /*
+    =================================================
+     PIXEL -> BLACK / WHITE
+    =================================================
+    */
+
+    function isBlack(
+        r,
+        g,
+        b,
+        a,
+        threshold
+    ) {
+
+        /*
+         * Transparent = WHITE
+         */
+
+        if (a === 0) {
+
+            return false;
+
+        }
+
+
+        /*
+         * Composite semi-transparent pixel
+         * terhadap WHITE.
+         */
+
+        if (a < 255) {
+
+            const alpha =
+                a / 255;
+
+
+            r =
+                r * alpha +
+                255 * (1 - alpha);
+
+
+            g =
+                g * alpha +
+                255 * (1 - alpha);
+
+
+            b =
+                b * alpha +
+                255 * (1 - alpha);
+
+        }
+
+
+        const gray =
+            grayscale(
+                r,
+                g,
+                b
+            );
+
+
+        /*
+         * FALSE = normal.
+         *
+         * Gelap -> BLACK
+         * Terang -> WHITE
+         */
+
+        return gray < threshold;
+
+    }
+
+
+    /*
+    =================================================
+     CANVAS -> RAW BITMAP
+    =================================================
+    */
+
+    function rasterize(
+        sourceCanvas,
+        config
+    ) {
+
+        validateCanvas(
+            sourceCanvas
+        );
+
+
+        const width =
+            config.widthDots;
+
+
+        const height =
+            config.heightDots;
+
+
+        /*
+         * TSPL width adalah BYTE,
+         * bukan DOT.
+         */
+
+        const bytesPerRow =
+            Math.ceil(
+                width / 8
+            );
+
+
+        /*
+         * 799 dots:
+         *
+         * ceil(799 / 8)
+         * = 100 bytes
+         */
+
+        const totalBytes =
+            bytesPerRow *
+            height;
+
+
+        /*
+         * Temporary raster.
+         */
+
+        const raster =
+            createRaster(
+                sourceCanvas,
+                width,
+                height
+            );
+
+
+        const ctx =
+            raster.getContext(
+                "2d",
+                {
+                    willReadFrequently: true
+                }
+            );
+
+
+        const image =
+            ctx.getImageData(
+                0,
+                0,
+                width,
+                height
+            );
+
+
+        const pixels =
+            image.data;
+
+
+        /*
+         * RAW bitmap.
+         *
+         * Jangan String.
+         * Jangan Base64.
+         * Jangan TextEncoder.
+         */
+
+        const bitmap =
+            new Uint8Array(
+                totalBytes
+            );
+
+
+        let blackPixels = 0;
+
+
+        /*
+         * =================================================
+         * MSB FIRST
+         *
+         * x=0 -> bit 7
+         * x=1 -> bit 6
+         * x=2 -> bit 5
+         * ...
+         * x=7 -> bit 0
+         *
+         * =================================================
+         */
+
+        for (
+            let y = 0;
+            y < height;
+            y++
+        ) {
+
+            const rowStart =
+                y *
+                bytesPerRow;
+
+
+            for (
+                let x = 0;
+                x < width;
+                x++
+            ) {
+
+                const pixel =
+                    (
+                        y *
+                        width +
+                        x
+                    ) * 4;
+
+
+                const r =
+                    pixels[pixel];
+
+
+                const g =
+                    pixels[pixel + 1];
+
+
+                const b =
+                    pixels[pixel + 2];
+
+
+                const a =
+                    pixels[pixel + 3];
+
+
+                const black =
+                    isBlack(
+                        r,
+                        g,
+                        b,
+                        a,
+                        config.threshold
+                    );
+
+
+                if (!black) {
+
+                    /*
+                     * 0 = WHITE
+                     */
+
+                    continue;
+
+                }
+
+
+                blackPixels++;
+
+
+                const byteIndex =
+                    rowStart +
+                    Math.floor(
+                        x / 8
+                    );
+
+
+                const bitIndex =
+                    7 -
+                    (x % 8);
+
+
+                /*
+                 * BLACK = 1
+                 */
+
+                bitmap[byteIndex] |=
+                    (
+                        1 <<
+                        bitIndex
+                    );
+
+            }
+
+        }
+
+
+        /*
+         * =================================================
+         * SAFETY CHECK
+         * =================================================
+         */
+
+        const totalPixels =
+            width *
+            height;
+
+
+        const blackRatio =
+            totalPixels > 0
+                ? blackPixels /
+                  totalPixels
+                : 0;
+
+
+        return {
+
+            bitmap,
+
+            width,
+
+            height,
+
+            bytesPerRow,
+
+            totalBytes,
+
+            blackPixels,
+
+            totalPixels,
+
+            blackRatio
+
+        };
+
+    }
+
+
+    /*
+    =================================================
+     ASCII -> UINT8
+    =================================================
+    */
+
+    function asciiBytes(
+        text
+    ) {
+
+        /*
+         * Header/footer adalah ASCII TSPL.
+         *
+         * HANYA bagian ini menggunakan
+         * TextEncoder.
+         */
+
+        return new TextEncoder()
+            .encode(text);
+
+    }
+
+
+    /*
+    =================================================
+     CONCAT RAW UINT8 ARRAYS
+    =================================================
+    */
+
+    function concatBytes(
+        ...arrays
+    ) {
+
+        let total = 0;
+
+
+        for (
+            const array of arrays
+        ) {
+
+            if (!array) {
+
+                continue;
+
+            }
+
+
+            total +=
+                array.length;
+
+        }
+
+
+        const output =
+            new Uint8Array(
+                total
+            );
+
+
+        let offset = 0;
+
+
+        for (
+            const array of arrays
+        ) {
+
+            if (!array) {
+
+                continue;
+
+            }
+
+
+            output.set(
+                array,
+                offset
+            );
+
+
+            offset +=
+                array.length;
+
+        }
+
+
+        return output;
+
+    }
+
+
+    /*
+    =================================================
+     BUILD TSPL HEADER
+    =================================================
+    */
+
+    function buildHeader(
+        config
+    ) {
+
+        return [
+
+            `SIZE ${config.widthMM} mm,${config.heightMM} mm`,
+
+            `GAP ${config.gap} mm,0`,
+
+            `DENSITY ${config.density}`,
+
+            `SPEED ${config.speed}`,
+
+            `CLS`,
+
+            `BITMAP ${config.x},${config.y},`
+
+        ].join("\r\n");
+
+    }
+
+
+    /*
+    =================================================
+     IMPORTANT:
+     BUILD BITMAP PREFIX
+    =================================================
+    */
+
+    function buildBitmapPrefix(
+        config,
+        bitmap
+    ) {
+
+        /*
+         * Jangan masukkan bitmap ke string.
+         *
+         * Prefix berhenti tepat setelah comma.
+         */
+
+        return (
+            `BITMAP ` +
+            `${config.x},` +
+            `${config.y},` +
+            `${bitmap.bytesPerRow},` +
+            `${bitmap.height},` +
+            `${config.bitmapMode},`
+        );
+
+    }
+
+
+    /*
+    =================================================
+     BUILD PRINT
+    =================================================
+    */
+
+    function buildPrint(
+        config
+    ) {
+
+        return (
+            `PRINT ${config.copies},1\r\n`
+        );
+
+    }
+
+
+    /*
+    =================================================
+     BUILD RAW JOB
+    =================================================
+    */
+
+    function buildJob(
+        sourceCanvas,
+        options = {}
+    ) {
+
+        const config =
+            getConfig(
+                options
+            );
+
+
+        const bitmap =
+            rasterize(
+                sourceCanvas,
+                config
+            );
+
+
+        /*
+         * =================================================
+         * BLACK BLOCK PROTECTION
+         * =================================================
+         *
+         * > 98% hitam:
+         * hampir pasti masalah raster/
+         * transparency/transport.
+         */
+
+        if (
+            bitmap.blackRatio >= 0.98
+        ) {
+
+            throw new Error(
+                "TSPL v5.3: JOB DIBATALKAN. " +
+                "Bitmap terdeteksi >=98% hitam. " +
+                "Canvas asli tidak diubah."
+            );
+
+        }
+
+
+        /*
+         * =================================================
+         * HEADER
+         * =================================================
+         */
+
+        const header =
+            [
+                `SIZE ${config.widthMM} mm,${config.heightMM} mm`,
+                `GAP ${config.gap} mm,0`,
+                `DENSITY ${config.density}`,
+                `SPEED ${config.speed}`,
+                `CLS`
+            ].join("\r\n");
+
+
+        /*
+         * =================================================
+         * BITMAP PREFIX
+         * =================================================
+         */
+
+        const bitmapPrefix =
+            buildBitmapPrefix(
+                config,
+                bitmap
+            );
+
+
+        /*
+         * =================================================
+         * FOOTER
+         * =================================================
+         *
+         * Tidak ada data bitmap di string.
+         */
+
+        const footer =
+            "\r\n" +
+            buildPrint(
+                config
+            );
+
+
+        /*
+         * =================================================
+         * CONVERT ASCII ONLY
+         * =================================================
+         */
+
+        const headerBytes =
+            asciiBytes(
+                header +
+                "\r\n"
+            );
+
+
+        const bitmapPrefixBytes =
+            asciiBytes(
+                bitmapPrefix
+            );
+
+
+        const footerBytes =
+            asciiBytes(
+                footer
+            );
+
+
+        /*
+         * =================================================
+         * RAW JOB
+         * =================================================
+         *
+         * HEADER ASCII
+         * +
+         * BITMAP PREFIX ASCII
+         * +
+         * RAW BITMAP
+         * +
+         * FOOTER ASCII
+         */
+
+        const data =
+            concatBytes(
+
+                headerBytes,
+
+                bitmapPrefixBytes,
+
+                bitmap.bitmap,
+
+                footerBytes
+
+            );
+
+
+        return {
+
+            data,
+
+            config,
+
+            bitmap,
+
+            headerBytes,
+
+            bitmapPrefixBytes,
+
+            footerBytes
+
+        };
+
+    }
+
+
+    /*
+    =================================================
+     HEX PREVIEW
+    =================================================
+    */
+
+    function hex(
+        bytes,
+        max = 64
+    ) {
+
+        const limit =
+            Math.min(
+                bytes.length,
+                max
+            );
+
+
+        const output = [];
+
+
+        for (
+            let i = 0;
+            i < limit;
+            i++
+        ) {
+
+            output.push(
+                bytes[i]
+                    .toString(16)
+                    .padStart(
+                        2,
+                        "0"
+                    )
+                    .toUpperCase()
+            );
+
+        }
+
+
+        return output.join(" ");
+
+    }
+
+
+    /*
+    =================================================
+     CHECK BITMAP
+    =================================================
+    */
+
+    function inspect(
+        canvas,
+        options = {}
+    ) {
+
+        const job =
+            buildJob(
+                canvas,
+                options
+            );
+
+
+        const bitmap =
+            job.bitmap;
+
+
+        /*
+         * Hitam pertama.
+         */
+
+        let firstBlack =
+            -1;
+
+
+        for (
+            let i = 0;
+            i < bitmap.bitmap.length;
+            i++
+        ) {
+
+            if (
+                bitmap.bitmap[i] !== 0
+            ) {
+
+                firstBlack =
+                    i;
+
+                break;
+
+            }
+
+        }
+
+
+        /*
+         * Hitam terakhir.
+         */
+
+        let lastBlack =
+            -1;
+
+
+        for (
+            let i =
+                bitmap.bitmap.length - 1;
+            i >= 0;
+            i--
+        ) {
+
+            if (
+                bitmap.bitmap[i] !== 0
+            ) {
+
+                lastBlack =
+                    i;
+
+                break;
+
+            }
+
+        }
+
+
+        return {
+
+            version:
+                VERSION,
+
+            label:
+                `${job.config.widthMM} x ` +
+                `${job.config.heightMM} mm`,
+
+            dpi:
+                job.config.dpi,
+
+            widthDots:
+                bitmap.width,
+
+            heightDots:
+                bitmap.height,
+
+            bytesPerRow:
+                bitmap.bytesPerRow,
+
+            bitmapBytes:
+                bitmap.totalBytes,
+
+            blackPixels:
+                bitmap.blackPixels,
+
+            totalPixels:
+                bitmap.totalPixels,
+
+            blackRatio:
+                bitmap.blackRatio,
+
+            blackPercent:
+                (
+                    bitmap.blackRatio *
+                    100
+                ).toFixed(2) + "%",
+
+            firstBlackByte:
+                firstBlack,
+
+            lastBlackByte:
+                lastBlack,
+
+            first64BitmapBytes:
+                hex(
+                    bitmap.bitmap,
+                    64
+                ),
+
+            first64JobBytes:
+                hex(
+                    job.data,
+                    64
+                ),
+
+            totalJobBytes:
+                job.data.length
+
+        };
+
+    }
+
+
+    /*
+    =================================================
+     PRINT TRANSPORT RESOLVER
+    =================================================
+    */
+
+    async function sendRaw(
+        data
+    ) {
+
+        if (
+            !(data instanceof Uint8Array)
+        ) {
+
+            throw new Error(
+                "TSPL v5.3: transport membutuhkan Uint8Array."
+            );
+
+        }
+
+
+        /*
+         * =================================================
+         * 1. SmartPrint Printer Manager v4.1
+         * =================================================
+         */
+
+        if (
+            typeof PrinterManager !==
+            "undefined" &&
+            PrinterManager
+        ) {
+
+            /*
+             * raw()
+             */
+
+            if (
+                typeof PrinterManager.raw ===
+                "function"
+            ) {
+
+                return await PrinterManager.raw(
+                    data
+                );
+
+            }
+
+
+            /*
+             * printRaw()
+             */
+
+            if (
+                typeof PrinterManager.printRaw ===
+                "function"
+            ) {
+
+                return await PrinterManager.printRaw(
+                    data
+                );
+
+            }
+
+
+            /*
+             * sendRaw()
+             */
+
+            if (
+                typeof PrinterManager.sendRaw ===
+                "function"
+            ) {
+
+                return await PrinterManager.sendRaw(
+                    data
+                );
+
+            }
+
+
+            /*
+             * send()
+             */
+
+            if (
+                typeof PrinterManager.send ===
+                "function"
+            ) {
+
+                return await PrinterManager.send(
+                    data
+                );
+
+            }
+
+
+            /*
+             * write()
+             */
+
+            if (
+                typeof PrinterManager.write ===
+                "function"
+            ) {
+
+                return await PrinterManager.write(
+                    data
+                );
+
+            }
+
+
+            /*
+             * print()
+             */
+
+            if (
+                typeof PrinterManager.print ===
+                "function"
+            ) {
+
+                return await PrinterManager.print(
+                    data
+                );
+
+            }
+
+        }
+
+
+        /*
+         * =================================================
+         * 2. SmartPrint Printer v4.1
+         * =================================================
+         */
+
+        if (
+            typeof Printer !==
+            "undefined" &&
+            Printer
+        ) {
+
+            if (
+                typeof Printer.raw ===
+                "function"
+            ) {
+
+                return await Printer.raw(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof Printer.printRaw ===
+                "function"
+            ) {
+
+                return await Printer.printRaw(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof Printer.sendRaw ===
+                "function"
+            ) {
+
+                return await Printer.sendRaw(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof Printer.send ===
+                "function"
+            ) {
+
+                return await Printer.send(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof Printer.write ===
+                "function"
+            ) {
+
+                return await Printer.write(
+                    data
+                );
+
+            }
+
+        }
+
+
+        /*
+         * =================================================
+         * 3. Bluetooth Engine v5.4
+         * =================================================
+         */
+
+        if (
+            typeof Bluetooth !==
+            "undefined" &&
+            Bluetooth
+        ) {
+
+            if (
+                typeof Bluetooth.sendRaw ===
+                "function"
+            ) {
+
+                return await Bluetooth.sendRaw(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof Bluetooth.raw ===
+                "function"
+            ) {
+
+                return await Bluetooth.raw(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof Bluetooth.send ===
+                "function"
+            ) {
+
+                return await Bluetooth.send(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof Bluetooth.write ===
+                "function"
+            ) {
+
+                return await Bluetooth.write(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof Bluetooth.writeRaw ===
+                "function"
+            ) {
+
+                return await Bluetooth.writeRaw(
+                    data
+                );
+
+            }
+
+        }
+
+
+        /*
+         * =================================================
+         * 4. SmartPrint BluetoothEngine
+         * =================================================
+         */
+
+        if (
+            typeof BluetoothEngine !==
+            "undefined" &&
+            BluetoothEngine
+        ) {
+
+            if (
+                typeof BluetoothEngine.sendRaw ===
+                "function"
+            ) {
+
+                return await BluetoothEngine.sendRaw(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof BluetoothEngine.raw ===
+                "function"
+            ) {
+
+                return await BluetoothEngine.raw(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof BluetoothEngine.send ===
+                "function"
+            ) {
+
+                return await BluetoothEngine.send(
+                    data
+                );
+
+            }
+
+
+            if (
+                typeof BluetoothEngine.write ===
+                "function"
+            ) {
+
+                return await BluetoothEngine.write(
+                    data
+                );
+
+            }
+
+        }
+
+
+        throw new Error(
+            "TSPL v5.3: Tidak ditemukan RAW transport pada Printer Manager / Bluetooth Engine."
+        );
+
+    }
+
+
+    /*
+    =================================================
+     PRINT
+    =================================================
+    */
+
+    async function print(
+        canvas,
+        options = {}
+    ) {
+
+        const job =
+            buildJob(
+                canvas,
+                options
+            );
+
+
+        if (
+            options.debug !== false
+        ) {
+
+            console.log(
+                "===================================="
+            );
+
+            console.log(
+                "SmartPrint TSPL Engine v" +
+                VERSION
+            );
+
+            console.log(
+                "===================================="
+            );
+
+            console.log(
+                "Label:",
+                job.config.widthMM,
+                "x",
+                job.config.heightMM,
+                "mm"
+            );
+
+            console.log(
+                "DPI:",
+                job.config.dpi
+            );
+
+            console.log(
+                "Dots:",
+                job.bitmap.width,
+                "x",
+                job.bitmap.height
+            );
+
+            console.log(
+                "Bytes / Row:",
+                job.bitmap.bytesPerRow
+            );
+
+            console.log(
+                "Bitmap:",
+                job.bitmap.totalBytes,
+                "bytes"
+            );
+
+            console.log(
+                "Black:",
+                (
+                    job.bitmap.blackRatio *
+                    100
+                ).toFixed(2) +
+                "%"
+            );
+
+            console.log(
+                "RAW Job:",
+                job.data.length,
+                "bytes"
+            );
+
+            console.log(
+                "Bitmap first bytes:",
+                hex(
+                    job.bitmap.bitmap,
+                    32
+                )
+            );
+
+            console.log(
+                "===================================="
+            );
+
+        }
+
+
+        /*
+         * PENTING:
+         *
+         * Kirim Uint8Array.
+         *
+         * BUKAN string.
+         *
+         * BUKAN Base64.
+         */
+
+        return await sendRaw(
+            job.data
+        );
+
+    }
+
+
+    /*
+    =================================================
+     SIMPLE BUILD API
+    =================================================
+    */
+
+    function fromCanvas(
+        canvas,
+        options = {}
+    ) {
+
+        return buildJob(
+            canvas,
+            options
+        );
+
+    }
+
+
+    /*
+    =================================================
+     TEST API
+    =================================================
+    */
+
+    function test(
+        canvas,
+        options = {}
+    ) {
+
+        const info =
+            inspect(
+                canvas,
+                options
+            );
+
+
+        console.group(
+            "SmartPrint TSPL v5.3"
+        );
+
+
+        console.log(
+            "Label:",
+            info.label
+        );
+
+
+        console.log(
+            "DPI:",
+            info.dpi
+        );
+
+
+        console.log(
+            "Dots:",
+            info.widthDots,
+            "x",
+            info.heightDots
+        );
+
+
+        console.log(
+            "Bytes/Row:",
+            info.bytesPerRow
+        );
+
+
+        console.log(
+            "Bitmap Bytes:",
+            info.bitmapBytes
+        );
+
+
+        console.log(
+            "Black:",
+            info.blackPercent
+        );
+
+
+        console.log(
+            "First Black Byte:",
+            info.firstBlackByte
+        );
+
+
+        console.log(
+            "Last Black Byte:",
+            info.lastBlackByte
+        );
+
+
+        console.log(
+            "Bitmap HEX:",
+            info.first64BitmapBytes
+        );
+
+
+        console.log(
+            "Job HEX:",
+            info.first64JobBytes
+        );
+
+
+        console.log(
+            "Total Job:",
+            info.totalJobBytes
+        );
+
+
+        console.groupEnd();
+
+
+        return info;
+
+    }
+
+
+    /*
+    =================================================
+     PUBLIC API
+    =================================================
+    */
+
+    return {
+
+        version:
+            VERSION,
+
+        defaults:
+            DEFAULTS,
+
+        getConfig,
+
+        validateCanvas,
+
+        createRaster,
+
+        rasterize,
+
+        buildHeader,
+
+        buildBitmapPrefix,
+
+        buildPrint,
+
+        buildJob,
+
+        fromCanvas,
+
+        inspect,
+
+        test,
+
+        sendRaw,
+
+        print
+
+    };
 
 })();
+
+
+/*
+=====================================================
+ GLOBAL
+=====================================================
+*/
+
+window.TSPL = TSPL;
+
+
+/*
+=====================================================
+ COMPATIBILITY
+=====================================================
+*/
+
+window.TSPLEngine = TSPL;
+
+window.TSPL_ENGINE = TSPL;
+
+window.SmartPrintTSPL = TSPL;
+
+
+/*
+=====================================================
+ READY
+=====================================================
+*/
+
+console.log(
+    "SmartPrint TSPL Engine v5.3 Ready"
+);
+
+console.log(
+    "Target: 100 x 150 mm | 203 DPI | 799 x 1199 dots"
+);
+
+console.log(
+    "Bitmap: RAW Uint8Array | MSB FIRST | Mode 0"
+);
