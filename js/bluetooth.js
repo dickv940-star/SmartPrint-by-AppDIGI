@@ -1059,7 +1059,268 @@
 
         },
 
+// =================================================
+// AUTO CONNECT
+// =================================================
 
+async autoConnect() {
+
+    console.log(
+        "SmartPrint Bluetooth Auto Connect..."
+    );
+
+
+    /*
+    =================================================
+    1. RESTORE SAVED TRANSPORT
+    =================================================
+    */
+
+    let savedTransport = null;
+
+    try {
+
+        savedTransport =
+            localStorage.getItem(
+                "SMARTPRINT_PRINTER_TRANSPORT"
+            );
+
+    }
+
+    catch (error) {
+
+        console.warn(
+            "Tidak dapat membaca saved transport.",
+            error
+        );
+
+    }
+
+
+    /*
+    =================================================
+    2. BLE AUTO CONNECT
+    =================================================
+    */
+
+    if (
+        savedTransport === "ble" &&
+        this.isBluetoothSupported() &&
+        typeof navigator.bluetooth.getDevices ===
+        "function"
+    ) {
+
+        try {
+
+            console.log(
+                "BLE Auto Connect..."
+            );
+
+
+            const devices =
+                await navigator.bluetooth.getDevices();
+
+
+            const savedId =
+                localStorage.getItem(
+                    "SMARTPRINT_PRINTER_ID"
+                );
+
+
+            const savedName =
+                localStorage.getItem(
+                    "SMARTPRINT_PRINTER_NAME"
+                );
+
+
+            let device = null;
+
+
+            if (savedId) {
+
+                device =
+                    devices.find(
+                        item =>
+                            item.id === savedId
+                    );
+
+            }
+
+
+            if (
+                !device &&
+                savedName
+            ) {
+
+                device =
+                    devices.find(
+                        item =>
+                            item.name === savedName
+                    );
+
+            }
+
+
+            if (device) {
+
+                console.log(
+                    "BLE Saved Device:",
+                    device.name ||
+                    "Unknown"
+                );
+
+
+                this.device =
+                    device;
+
+
+                this.deviceName =
+                    device.name ||
+                    "BLE Printer";
+
+
+                this.transport =
+                    "ble";
+
+
+                this.removeDisconnectListener();
+
+
+                this.attachDisconnectEvent();
+
+
+                await this.connectGATT();
+
+
+                this.connected =
+                    true;
+
+
+                this.updateStatus(
+                    "connected"
+                );
+
+
+                console.log(
+                    "BLE Auto Connected:",
+                    this.getDeviceName()
+                );
+
+
+                return true;
+
+            }
+
+        }
+
+        catch (error) {
+
+            console.warn(
+                "BLE Auto Connect gagal:",
+                error
+            );
+
+        }
+
+    }
+
+
+    /*
+    =================================================
+    3. BRIDGE AUTO CONNECT
+    =================================================
+    */
+
+    if (
+        savedTransport === "bridge"
+    ) {
+
+        try {
+
+            console.log(
+                "Bridge Auto Connect..."
+            );
+
+
+            const result =
+                await this.connectBridge(
+                    true
+                );
+
+
+            if (result) {
+
+                console.log(
+                    "Bridge Auto Connected."
+                );
+
+
+                return true;
+
+            }
+
+        }
+
+        catch (error) {
+
+            console.warn(
+                "Bridge Auto Connect gagal:",
+                error
+            );
+
+        }
+
+    }
+
+
+    /*
+    =================================================
+    4. SERIAL
+    =================================================
+
+    Jangan memanggil requestPort() otomatis.
+
+    Browser membutuhkan user gesture untuk
+    memilih COM port.
+
+    Jadi serial menunggu tombol Connect.
+    */
+
+    if (
+        savedTransport === "serial"
+    ) {
+
+        console.log(
+            "Saved Bluetooth Classic printer ditemukan."
+        );
+
+
+        console.log(
+            "Serial Auto Connect dilewati."
+        );
+
+
+        console.log(
+            "Menunggu tombol Connect manual."
+        );
+
+    }
+
+
+    /*
+    =================================================
+    5. NO AUTO CONNECTION
+    =================================================
+    */
+
+    console.log(
+        "Tidak ada printer yang dapat auto-connect."
+    );
+
+
+    return false;
+
+},
         // =================================================
         // RECONNECT
         // =================================================
