@@ -1,8 +1,6 @@
-"use strict";
-
 /*
 =========================================================
- SmartPrint Bluetooth Engine v5.8.0
+ SmartPrint Bluetooth Engine v6.0.0
  Universal BLE Thermal Printer Transport
 =========================================================
 
@@ -20,18 +18,18 @@
  --------------------------------------------------------
  1. User memilih device melalui Bluetooth picker
  2. acceptAllDevices = true
- 3. optionalServices digunakan untuk memberi akses
-    ke service printer setelah device dipilih
+ 3. optionalServices memberi akses ke service printer
  4. Scan seluruh primary services
  5. Scan seluruh characteristics
  6. Cari WRITE characteristic
  7. Prioritas:
-       writeWithoutResponse
-       write
+      writeWithoutResponse
+      write
  8. sendRaw(Uint8Array)
  9. Tidak menggunakan TextEncoder
 10. Tidak menggunakan Base64
-
+11. Diagnostic tersedia:
+      Bluetooth.diagnosePrinter()
 =========================================================
 */
 
@@ -39,32 +37,21 @@
 
     "use strict";
 
-    const VERSION = "5.8.0";
-
-
-    /*
-    =====================================================
-     STATE
-    =====================================================
-    */
+    const VERSION = "6.0.0";
 
     let device = null;
-
     let server = null;
-
     let writeCharacteristic = null;
-
     let notifyCharacteristic = null;
 
     let serialPort = null;
-
     let serialWriter = null;
 
     let bridgeConnected = false;
-
     let connecting = false;
 
     let disconnectHandlerDevice = null;
+    let notificationHandlerCharacteristic = null;
 
 
     /*
@@ -76,7 +63,6 @@
     const CONFIG = {
 
         /*
-         * Jangan terlalu besar.
          * 20 byte aman untuk banyak BLE printer.
          */
 
@@ -90,16 +76,9 @@
 
         /*
          * Service UUID umum printer BLE.
-         *
-         * PENTING:
-         * Ini BUKAN filter device picker.
          */
 
         optionalServices: [
-
-            /*
-             * Generic / custom BLE
-             */
 
             "0000ffe0-0000-1000-8000-00805f9b34fb",
 
@@ -114,13 +93,13 @@
             "000018ff-0000-1000-8000-00805f9b34fb",
 
             /*
-             * Nordic UART style
+             * Nordic UART
              */
 
             "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
 
             /*
-             * Common serial service
+             * Serial service
              */
 
             "00001101-0000-1000-8000-00805f9b34fb"
@@ -254,7 +233,7 @@
 
         throw new TypeError(
 
-            "SmartPrint Bluetooth: data harus Uint8Array."
+            "SmartPrint Bluetooth: data harus Uint8Array, ArrayBuffer, atau TypedArray."
 
         );
 
@@ -263,7 +242,7 @@
 
     /*
     =====================================================
-     DISPATCH EVENT
+     EVENT
     =====================================================
     */
 
@@ -296,7 +275,7 @@
 
     /*
     =====================================================
-     DEVICE INFO
+     DEVICE
     =====================================================
     */
 
@@ -322,7 +301,7 @@
 
     /*
     =====================================================
-     CONNECTION STATE
+     CONNECTION
     =====================================================
     */
 
@@ -415,6 +394,23 @@
 
     /*
     =====================================================
+     CLEAR
+    =====================================================
+    */
+
+    function clearCharacteristics() {
+
+        writeCharacteristic = null;
+
+        notifyCharacteristic = null;
+
+        notificationHandlerCharacteristic = null;
+
+    }
+
+
+    /*
+    =====================================================
      DISCONNECT EVENT
     =====================================================
     */
@@ -429,16 +425,14 @@
 
                 ? event.target.name
 
-                : ""
+                : getDeviceName()
 
         );
 
 
         server = null;
 
-        writeCharacteristic = null;
-
-        notifyCharacteristic = null;
+        clearCharacteristics();
 
 
         dispatch(
@@ -462,7 +456,9 @@
 
                 connected: false,
 
-                type: null
+                type: null,
+
+                device: device
 
             }
 
@@ -486,7 +482,11 @@
         }
 
 
-        if (disconnectHandlerDevice === target) {
+        if (
+
+            disconnectHandlerDevice === target
+
+        ) {
 
             return;
 
@@ -574,7 +574,7 @@
 
     /*
     =====================================================
-     REQUEST BLE DEVICE
+     REQUEST DEVICE
     =====================================================
     */
 
@@ -627,27 +627,66 @@
         log("Membuka Bluetooth picker...");
 
 
-        /*
-         * PENTING:
-         *
-         * acceptAllDevices tetap true.
-         *
-         * optionalServices WAJIB disertakan agar
-         * service custom printer dapat diakses
-         * setelah device dipilih.
-         */
+        let selected;
 
-        const selected =
 
-            await navigator.bluetooth.requestDevice({
+        try {
 
-                acceptAllDevices: true,
+            selected =
 
-                optionalServices:
+                await navigator.bluetooth.requestDevice({
 
-                    CONFIG.optionalServices
+                    acceptAllDevices: true,
 
-            });
+                    optionalServices:
+
+                        CONFIG.optionalServices
+
+                });
+
+        }
+
+        catch (err) {
+
+            if (
+
+                err &&
+
+                (
+
+                    err.name === "NotFoundError" ||
+
+                    err.name === "AbortError"
+
+                )
+
+            ) {
+
+                log(
+
+                    "Bluetooth picker dibatalkan pengguna."
+
+                );
+
+
+                dispatch(
+
+                    "cancelled",
+
+                    {
+
+                        error: err
+
+                    }
+
+                );
+
+            }
+
+
+            throw err;
+
+        }
 
 
         if (!selected) {
@@ -733,9 +772,8 @@
         attachDisconnectHandler(device);
 
 
-        /*
-         * Sudah connected
-         */
+        clearCharacteristics();
+
 
         if (device.gatt.connected) {
 
@@ -796,10 +834,6 @@
         );
 
 
-        /*
-         * Cari printer service
-         */
-
         await discoverServices();
 
 
@@ -834,6 +868,24 @@
             "WRITE:",
 
             writeCharacteristic.uuid
+
+        );
+
+        log(
+
+            "WRITE WITHOUT RESPONSE:",
+
+            !!writeCharacteristic.properties
+
+                .writeWithoutResponse
+
+        );
+
+        log(
+
+            "WRITE:",
+
+            !!writeCharacteristic.properties.write
 
         );
 
@@ -925,7 +977,7 @@
         log("========================================");
 
 
-        let services = [];
+        let services;
 
 
         try {
@@ -978,9 +1030,7 @@
         }
 
 
-        writeCharacteristic = null;
-
-        notifyCharacteristic = null;
+        clearCharacteristics();
 
 
         let bestWriteWithoutResponse = null;
@@ -989,10 +1039,6 @@
 
         let bestNotify = null;
 
-
-        /*
-         * Scan semua service
-         */
 
         for (const service of services) {
 
@@ -1005,7 +1051,7 @@
             );
 
 
-            let characteristics = [];
+            let characteristics;
 
 
             try {
@@ -1027,7 +1073,6 @@
                     err
 
                 );
-
 
                 continue;
 
@@ -1080,14 +1125,14 @@
 
                     "notify=",
 
-                    canNotify
+                    canNotify,
+
+                    "read=",
+
+                    p.read === true
 
                 );
 
-
-                /*
-                 * WRITE WITHOUT RESPONSE
-                 */
 
                 if (
 
@@ -1104,10 +1149,6 @@
                 }
 
 
-                /*
-                 * WRITE
-                 */
-
                 if (
 
                     canWrite &&
@@ -1122,10 +1163,6 @@
 
                 }
 
-
-                /*
-                 * NOTIFY
-                 */
 
                 if (
 
@@ -1146,10 +1183,6 @@
         }
 
 
-        /*
-         * Prioritas writeWithoutResponse
-         */
-
         writeCharacteristic =
 
             bestWriteWithoutResponse ||
@@ -1167,7 +1200,7 @@
 
 
         /*
-         * Notify
+         * ENABLE NOTIFY
          */
 
         if (notifyCharacteristic) {
@@ -1175,10 +1208,12 @@
             try {
 
                 await notifyCharacteristic
+
                     .startNotifications();
 
 
                 notifyCharacteristic
+
                     .addEventListener(
 
                         "characteristicvaluechanged",
@@ -1186,6 +1221,11 @@
                         handleNotification
 
                     );
+
+
+                notificationHandlerCharacteristic =
+
+                    notifyCharacteristic;
 
 
                 log(
@@ -1233,12 +1273,6 @@
 
             );
 
-
-            /*
-             * Jangan menyebut device tidak kompatibel.
-             *
-             * Device sudah berhasil terhubung.
-             */
 
             throw new Error(
 
@@ -1365,13 +1399,6 @@
 
         try {
 
-            /*
-             * SELALU gunakan picker untuk tombol
-             * CONNECT PRINTER.
-             *
-             * Jangan bergantung pada getDevices().
-             */
-
             const target =
 
                 await requestBLEDevice();
@@ -1384,12 +1411,11 @@
             }
 
 
-            const result =
+            return !!(
 
-                await connectGATT(target);
+                await connectGATT(target)
 
-
-            return !!result;
+            );
 
         }
 
@@ -1408,20 +1434,6 @@
                 )
 
             ) {
-
-                log(
-
-                    "Bluetooth picker dibatalkan pengguna."
-
-                );
-
-
-                dispatch(
-
-                    "cancelled"
-
-                );
-
 
                 return false;
 
@@ -1492,7 +1504,7 @@
 
     /*
     =====================================================
-     CONNECT BLE
+     CONNECT ALIASES
     =====================================================
     */
 
@@ -1502,12 +1514,6 @@
 
     }
 
-
-    /*
-    =====================================================
-     CONNECT BLE NEW
-    =====================================================
-    */
 
     async function connectBLENew() {
 
@@ -1523,10 +1529,6 @@
     */
 
     async function autoConnect() {
-
-        /*
-         * Jangan membuka picker otomatis.
-         */
 
         if (!isBluetoothSupported()) {
 
@@ -1576,14 +1578,6 @@
             }
 
 
-            /*
-             * Jika hanya satu known device,
-             * gunakan device tersebut.
-             */
-
-            let target = null;
-
-
             const savedId =
 
                 localStorage.getItem(
@@ -1591,6 +1585,9 @@
                     "SMARTPRINT_BLUETOOTH_ID"
 
                 ) || "";
+
+
+            let target = null;
 
 
             if (savedId) {
@@ -1613,14 +1610,7 @@
             }
 
 
-            if (!target) {
-
-                return false;
-
-            }
-
-
-            if (!target.gatt) {
+            if (!target || !target.gatt) {
 
                 return false;
 
@@ -1654,6 +1644,17 @@
             saveDeviceInfo();
 
 
+            if (!writeCharacteristic) {
+
+                throw new Error(
+
+                    "Auto Connect berhasil ke GATT tetapi WRITE characteristic tidak ditemukan."
+
+                );
+
+            }
+
+
             dispatch(
 
                 "connected",
@@ -1664,7 +1665,28 @@
 
                     name: getDeviceName(),
 
-                    type: "BLE"
+                    type: "BLE",
+
+                    writeCharacteristic:
+
+                        writeCharacteristic.uuid
+
+                }
+
+            );
+
+
+            dispatch(
+
+                "status",
+
+                {
+
+                    connected: true,
+
+                    type: "BLE",
+
+                    device: device
 
                 }
 
@@ -1693,6 +1715,11 @@
                 err
 
             );
+
+
+            server = null;
+
+            clearCharacteristics();
 
 
             return false;
@@ -1761,7 +1788,13 @@
 
         const chunkSize =
 
-            CONFIG.bleChunkSize;
+            Math.max(
+
+                1,
+
+                Number(CONFIG.bleChunkSize) || 20
+
+            );
 
 
         log(
@@ -1831,13 +1864,17 @@
 
                     .writeValueWithoutResponse ===
 
-                    "function"
+                "function"
 
             ) {
 
                 await characteristic
 
-                    .writeValueWithoutResponse(chunk);
+                    .writeValueWithoutResponse(
+
+                        chunk
+
+                    );
 
             }
 
@@ -1847,13 +1884,17 @@
 
                     .writeValueWithResponse ===
 
-                    "function"
+                "function"
 
             ) {
 
                 await characteristic
 
-                    .writeValueWithResponse(chunk);
+                    .writeValueWithResponse(
+
+                        chunk
+
+                    );
 
             }
 
@@ -1863,7 +1904,7 @@
 
                     .writeValue ===
 
-                    "function"
+                "function"
 
             ) {
 
@@ -1886,7 +1927,7 @@
 
             if (
 
-                offset + chunkSize <
+                offset + chunk.length <
 
                 bytes.length
 
@@ -1894,7 +1935,17 @@
 
                 await sleep(
 
-                    CONFIG.bleChunkDelay
+                    Math.max(
+
+                        0,
+
+                        Number(
+
+                            CONFIG.bleChunkDelay
+
+                        ) || 0
+
+                    )
 
                 );
 
@@ -1953,6 +2004,21 @@
                 "connected",
 
                 {
+
+                    type: "SERIAL"
+
+                }
+
+            );
+
+
+            dispatch(
+
+                "status",
+
+                {
+
+                    connected: true,
 
                     type: "SERIAL"
 
@@ -2167,6 +2233,21 @@
             );
 
 
+            dispatch(
+
+                "status",
+
+                {
+
+                    connected: true,
+
+                    type: "BRIDGE"
+
+                }
+
+            );
+
+
             return true;
 
         }
@@ -2372,9 +2453,48 @@
 
                 try {
 
-                    await notifyCharacteristic
+                    if (
 
-                        .stopNotifications();
+                        typeof notifyCharacteristic
+
+                            .stopNotifications ===
+
+                        "function"
+
+                    ) {
+
+                        await notifyCharacteristic
+
+                            .stopNotifications();
+
+                    }
+
+                }
+
+                catch (e) {}
+
+
+                try {
+
+                    if (
+
+                        notificationHandlerCharacteristic ===
+
+                        notifyCharacteristic
+
+                    ) {
+
+                        notifyCharacteristic
+
+                            .removeEventListener(
+
+                                "characteristicvaluechanged",
+
+                                handleNotification
+
+                            );
+
+                    }
 
                 }
 
@@ -2414,14 +2534,18 @@
 
         server = null;
 
-        writeCharacteristic = null;
-
-        notifyCharacteristic = null;
+        clearCharacteristics();
 
 
         dispatch(
 
-            "disconnected"
+            "disconnected",
+
+            {
+
+                device: device
+
+            }
 
         );
 
@@ -2495,6 +2619,7 @@
 
         await disconnectSerial();
 
+
         bridgeConnected = false;
 
 
@@ -2530,9 +2655,13 @@
 
             version: VERSION,
 
-            connected: isConnected(),
+            connected:
 
-            type: getConnectionType(),
+                isConnected(),
+
+            type:
+
+                getConnectionType(),
 
             deviceName:
 
@@ -2563,6 +2692,38 @@
                 writeCharacteristic
 
                     ? writeCharacteristic.uuid
+
+                    : null,
+
+            writeMode:
+
+                writeCharacteristic
+
+                    ? (
+
+                        writeCharacteristic
+
+                            .properties
+
+                            .writeWithoutResponse
+
+                            ? "WRITE WITHOUT RESPONSE"
+
+                            : (
+
+                                writeCharacteristic
+
+                                    .properties
+
+                                    .write
+
+                                    ? "WRITE"
+
+                                    : null
+
+                            )
+
+                    )
 
                     : null,
 
@@ -2611,14 +2772,761 @@
 
         server = null;
 
-        writeCharacteristic = null;
-
-        notifyCharacteristic = null;
+        clearCharacteristics();
 
         disconnectHandlerDevice = null;
 
 
         return true;
+
+    }
+
+
+    /*
+    =====================================================
+     DIAGNOSTIC
+    =====================================================
+    */
+
+    async function diagnosePrinter() {
+
+        console.log("");
+
+        console.log(
+
+            "========================================"
+
+        );
+
+        console.log(
+
+            " SMARTPRINT BLE PRINTER DIAGNOSTIC"
+
+        );
+
+        console.log(
+
+            "========================================"
+
+        );
+
+
+        if (!isBluetoothSupported()) {
+
+            console.error(
+
+                "[Diagnostic] Web Bluetooth tidak tersedia."
+
+            );
+
+
+            return {
+
+                supported: false,
+
+                selected: false,
+
+                gatt: false,
+
+                services: [],
+
+                write: null,
+
+                notify: null
+
+            };
+
+        }
+
+
+        let selected = null;
+
+
+        try {
+
+            console.log(
+
+                "[Diagnostic] Membuka Bluetooth picker..."
+
+            );
+
+
+            selected =
+
+                await navigator.bluetooth.requestDevice({
+
+                    acceptAllDevices: true,
+
+                    optionalServices:
+
+                        CONFIG.optionalServices
+
+                });
+
+        }
+
+        catch (err) {
+
+            console.error(
+
+                "[Diagnostic] Bluetooth picker error:",
+
+                err
+
+            );
+
+
+            return {
+
+                supported: true,
+
+                selected: false,
+
+                cancelled:
+
+                    !!(
+
+                        err &&
+
+                        (
+
+                            err.name === "NotFoundError" ||
+
+                            err.name === "AbortError"
+
+                        )
+
+                    ),
+
+                error: err
+
+            };
+
+        }
+
+
+        if (!selected) {
+
+            console.warn(
+
+                "[Diagnostic] Tidak ada device dipilih."
+
+            );
+
+
+            return {
+
+                supported: true,
+
+                selected: false
+
+            };
+
+        }
+
+
+        console.log("");
+
+        console.log(
+
+            "========================================"
+
+        );
+
+        console.log(
+
+            " DEVICE TERPILIH"
+
+        );
+
+        console.log(
+
+            "========================================"
+
+        );
+
+
+        console.log(
+
+            "Name:",
+
+            selected.name || "(unknown)"
+
+        );
+
+
+        console.log(
+
+            "ID:",
+
+            selected.id || "(unknown)"
+
+        );
+
+
+        console.log(
+
+            "GATT:",
+
+            Boolean(selected.gatt)
+
+        );
+
+
+        if (!selected.gatt) {
+
+            return {
+
+                supported: true,
+
+                selected: true,
+
+                name:
+
+                    selected.name || "",
+
+                id:
+
+                    selected.id || "",
+
+                gatt: false,
+
+                services: [],
+
+                write: null,
+
+                notify: null
+
+            };
+
+        }
+
+
+        try {
+
+            console.log(
+
+                "[Diagnostic] GATT connecting..."
+
+            );
+
+
+            const diagnosticServer =
+
+                selected.gatt.connected
+
+                    ? selected.gatt
+
+                    : await selected.gatt.connect();
+
+
+            console.log(
+
+                "[Diagnostic] GATT CONNECTED"
+
+            );
+
+
+            const services =
+
+                await diagnosticServer
+
+                    .getPrimaryServices();
+
+
+            console.log("");
+
+            console.log(
+
+                "========================================"
+
+            );
+
+            console.log(
+
+                " PRIMARY SERVICES:",
+
+                services.length
+
+            );
+
+            console.log(
+
+                "========================================"
+
+            );
+
+
+            const serviceResults = [];
+
+
+            for (const service of services) {
+
+                console.log("");
+
+                console.log(
+
+                    "SERVICE:",
+
+                    service.uuid
+
+                );
+
+
+                let characteristics = [];
+
+
+                try {
+
+                    characteristics =
+
+                        await service
+
+                            .getCharacteristics();
+
+                }
+
+                catch (err) {
+
+                    console.warn(
+
+                        "Gagal membaca characteristic:",
+
+                        err
+
+                    );
+
+
+                    serviceResults.push({
+
+                        uuid:
+
+                            service.uuid,
+
+                        characteristics: [],
+
+                        error:
+
+                            String(
+
+                                err && err.message
+
+                                    ? err.message
+
+                                    : err
+
+                            )
+
+                    });
+
+
+                    continue;
+
+                }
+
+
+                const characteristicResults = [];
+
+
+                for (
+
+                    const characteristic
+
+                    of characteristics
+
+                ) {
+
+                    const properties =
+
+                        characteristic.properties ||
+
+                        {};
+
+
+                    const result = {
+
+                        uuid:
+
+                            characteristic.uuid,
+
+                        read:
+
+                            Boolean(properties.read),
+
+                        write:
+
+                            Boolean(properties.write),
+
+                        writeWithoutResponse:
+
+                            Boolean(
+
+                                properties
+
+                                    .writeWithoutResponse
+
+                            ),
+
+                        notify:
+
+                            Boolean(properties.notify),
+
+                        indicate:
+
+                            Boolean(properties.indicate)
+
+                    };
+
+
+                    characteristicResults.push(
+
+                        result
+
+                    );
+
+
+                    console.log(
+
+                        "  CHARACTERISTIC:",
+
+                        result.uuid
+
+                    );
+
+
+                    console.log(
+
+                        "    read:",
+
+                        result.read
+
+                    );
+
+
+                    console.log(
+
+                        "    write:",
+
+                        result.write
+
+                    );
+
+
+                    console.log(
+
+                        "    writeWithoutResponse:",
+
+                        result.writeWithoutResponse
+
+                    );
+
+
+                    console.log(
+
+                        "    notify:",
+
+                        result.notify
+
+                    );
+
+
+                    console.log(
+
+                        "    indicate:",
+
+                        result.indicate
+
+                    );
+
+                }
+
+
+                serviceResults.push({
+
+                    uuid:
+
+                        service.uuid,
+
+                    characteristics:
+
+                        characteristicResults
+
+                });
+
+            }
+
+
+            let writeFound = null;
+
+            let notifyFound = null;
+
+
+            for (
+
+                const service
+
+                of serviceResults
+
+            ) {
+
+                for (
+
+                    const characteristic
+
+                    of service.characteristics
+
+                ) {
+
+                    if (
+
+                        !writeFound &&
+
+                        (
+
+                            characteristic.write ||
+
+                            characteristic
+
+                                .writeWithoutResponse
+
+                        )
+
+                    ) {
+
+                        writeFound = {
+
+                            service:
+
+                                service.uuid,
+
+                            characteristic:
+
+                                characteristic.uuid,
+
+                            write:
+
+                                characteristic.write,
+
+                            writeWithoutResponse:
+
+                                characteristic
+
+                                    .writeWithoutResponse
+
+                        };
+
+                    }
+
+
+                    if (
+
+                        !notifyFound &&
+
+                        (
+
+                            characteristic.notify ||
+
+                            characteristic.indicate
+
+                        )
+
+                    ) {
+
+                        notifyFound = {
+
+                            service:
+
+                                service.uuid,
+
+                            characteristic:
+
+                                characteristic.uuid,
+
+                            notify:
+
+                                characteristic.notify,
+
+                            indicate:
+
+                                characteristic.indicate
+
+                        };
+
+                    }
+
+                }
+
+            }
+
+
+            console.log("");
+
+            console.log(
+
+                "========================================"
+
+            );
+
+            console.log(
+
+                " DIAGNOSTIC RESULT"
+
+            );
+
+            console.log(
+
+                "========================================"
+
+            );
+
+            console.log(
+
+                "Printer:",
+
+                selected.name || "(unknown)"
+
+            );
+
+            console.log(
+
+                "GATT:",
+
+                true
+
+            );
+
+            console.log(
+
+                "Services:",
+
+                services.length
+
+            );
+
+            console.log(
+
+                "WRITE:",
+
+                writeFound || "NOT FOUND"
+
+            );
+
+            console.log(
+
+                "NOTIFY:",
+
+                notifyFound || "NOT FOUND"
+
+            );
+
+            console.log(
+
+                "========================================"
+
+            );
+
+
+            return {
+
+                supported: true,
+
+                selected: true,
+
+                name:
+
+                    selected.name || "",
+
+                id:
+
+                    selected.id || "",
+
+                gatt: true,
+
+                services:
+
+                    serviceResults,
+
+                write:
+
+                    writeFound,
+
+                notify:
+
+                    notifyFound
+
+            };
+
+        }
+
+        catch (err) {
+
+            console.error(
+
+                "[Diagnostic] GATT/service error:",
+
+                err
+
+            );
+
+
+            return {
+
+                supported: true,
+
+                selected: true,
+
+                name:
+
+                    selected.name || "",
+
+                id:
+
+                    selected.id || "",
+
+                gatt:
+
+                    Boolean(selected.gatt),
+
+                services: [],
+
+                write: null,
+
+                notify: null,
+
+                error: err
+
+            };
+
+        }
+
+    }
+
+
+    /*
+    =====================================================
+     TEST RAW
+    =====================================================
+    */
+
+    async function testRaw(bytes) {
+
+        const data =
+
+            normalizeBytes(bytes);
+
+
+        log(
+
+            "TEST RAW:",
+
+            data.length,
+
+            "bytes"
+
+        );
+
+
+        return sendRaw(data);
 
     }
 
@@ -2631,7 +3539,11 @@
 
     async function init() {
 
-        log("========================================");
+        log(
+
+            "========================================"
+
+        );
 
         log(
 
@@ -2641,7 +3553,12 @@
 
         );
 
-        log("========================================");
+        log(
+
+            "========================================"
+
+        );
+
 
         log(
 
@@ -2676,10 +3593,6 @@
         );
 
 
-        /*
-         * Auto connect TIDAK membuka picker.
-         */
-
         try {
 
             await autoConnect();
@@ -2703,458 +3616,7 @@
 
     }
 
-/*
-=====================================================
- SMARTPRINT 4B-2084A DIAGNOSTIC
-=====================================================
-*/
 
-async function diagnosePrinter() {
-
-    console.log("");
-    console.log("========================================");
-    console.log(" SMARTPRINT 4B-2084A DIAGNOSTIC");
-    console.log("========================================");
-
-    if (!isBluetoothSupported()) {
-
-        console.error(
-            "[Diagnostic] Web Bluetooth tidak tersedia."
-        );
-
-        return {
-            supported: false
-        };
-
-    }
-
-    let selected = null;
-
-    try {
-
-        console.log(
-            "[Diagnostic] Membuka Bluetooth picker..."
-        );
-
-        selected =
-            await navigator.bluetooth.requestDevice({
-
-                acceptAllDevices: true,
-
-                optionalServices:
-                    CONFIG.optionalServices
-
-            });
-
-    }
-
-    catch (err) {
-
-        console.error(
-            "[Diagnostic] Bluetooth picker error:",
-            err
-        );
-
-        return {
-            supported: true,
-            selected: false,
-            error: err
-        };
-
-    }
-
-    if (!selected) {
-
-        console.warn(
-            "[Diagnostic] Tidak ada device dipilih."
-        );
-
-        return {
-            supported: true,
-            selected: false
-        };
-
-    }
-
-    console.log("");
-    console.log("========================================");
-    console.log(" DEVICE TERPILIH");
-    console.log("========================================");
-
-    console.log(
-        "Name:",
-        selected.name || "(unknown)"
-    );
-
-    console.log(
-        "ID:",
-        selected.id || "(unknown)"
-    );
-
-    console.log(
-        "GATT:",
-        Boolean(selected.gatt)
-    );
-
-    /*
-    ================================================
-     CONNECT
-    ================================================
-    */
-
-    try {
-
-        if (
-            !selected.gatt
-        ) {
-
-            throw new Error(
-                "Device tidak memiliki GATT."
-            );
-
-        }
-
-        console.log(
-            "[Diagnostic] GATT connecting..."
-        );
-
-        const diagnosticServer =
-            await selected.gatt.connect();
-
-        console.log(
-            "[Diagnostic] GATT CONNECTED"
-        );
-
-        /*
-        ============================================
-         SERVICES
-        ============================================
-        */
-
-        const services =
-            await diagnosticServer.getPrimaryServices();
-
-        console.log("");
-        console.log(
-            "========================================"
-        );
-
-        console.log(
-            " PRIMARY SERVICES:",
-            services.length
-        );
-
-        console.log(
-            "========================================"
-        );
-
-        const serviceResults = [];
-
-        /*
-        ============================================
-         SCAN SERVICES
-        ============================================
-        */
-
-        for (
-            const service of services
-        ) {
-
-            console.log("");
-            console.log(
-                "SERVICE:",
-                service.uuid
-            );
-
-            let characteristics = [];
-
-            try {
-
-                characteristics =
-                    await service.getCharacteristics();
-
-            }
-
-            catch (err) {
-
-                console.warn(
-                    "Gagal membaca characteristic:",
-                    err
-                );
-
-                continue;
-
-            }
-
-            const characteristicResults = [];
-
-            for (
-                const characteristic
-                of characteristics
-            ) {
-
-                const properties =
-                    characteristic.properties ||
-                    {};
-
-                const result = {
-
-                    uuid:
-                        characteristic.uuid,
-
-                    write:
-                        Boolean(
-                            properties.write
-                        ),
-
-                    writeWithoutResponse:
-                        Boolean(
-                            properties.writeWithoutResponse
-                        ),
-
-                    notify:
-                        Boolean(
-                            properties.notify
-                        ),
-
-                    indicate:
-                        Boolean(
-                            properties.indicate
-                        ),
-
-                    read:
-                        Boolean(
-                            properties.read
-                        )
-
-                };
-
-                characteristicResults.push(
-                    result
-                );
-
-                console.log(
-                    "  CHARACTERISTIC:",
-                    characteristic.uuid
-                );
-
-                console.log(
-                    "    read:",
-                    result.read
-                );
-
-                console.log(
-                    "    write:",
-                    result.write
-                );
-
-                console.log(
-                    "    writeWithoutResponse:",
-                    result.writeWithoutResponse
-                );
-
-                console.log(
-                    "    notify:",
-                    result.notify
-                );
-
-                console.log(
-                    "    indicate:",
-                    result.indicate
-                );
-
-            }
-
-            serviceResults.push({
-
-                uuid:
-                    service.uuid,
-
-                characteristics:
-                    characteristicResults
-
-            });
-
-        }
-
-        /*
-        ============================================
-         FIND WRITE
-        ============================================
-        */
-
-        let writeFound = null;
-
-        let notifyFound = null;
-
-        for (
-            const service
-            of serviceResults
-        ) {
-
-            for (
-                const characteristic
-                of service.characteristics
-            ) {
-
-                if (
-                    !writeFound &&
-                    (
-                        characteristic.write ||
-                        characteristic.writeWithoutResponse
-                    )
-                ) {
-
-                    writeFound = {
-                        service:
-                            service.uuid,
-
-                        characteristic:
-                            characteristic.uuid,
-
-                        write:
-                            characteristic.write,
-
-                        writeWithoutResponse:
-                            characteristic.writeWithoutResponse
-                    };
-
-                }
-
-                if (
-                    !notifyFound &&
-                    (
-                        characteristic.notify ||
-                        characteristic.indicate
-                    )
-                ) {
-
-                    notifyFound = {
-                        service:
-                            service.uuid,
-
-                        characteristic:
-                            characteristic.uuid,
-
-                        notify:
-                            characteristic.notify,
-
-                        indicate:
-                            characteristic.indicate
-                    };
-
-                }
-
-            }
-
-        }
-
-        console.log("");
-        console.log(
-            "========================================"
-        );
-
-        console.log(
-            " DIAGNOSTIC RESULT"
-        );
-
-        console.log(
-            "========================================"
-        );
-
-        console.log(
-            "Printer:",
-            selected.name || "(unknown)"
-        );
-
-        console.log(
-            "GATT:",
-            true
-        );
-
-        console.log(
-            "Services:",
-            services.length
-        );
-
-        console.log(
-            "WRITE:",
-            writeFound || "NOT FOUND"
-        );
-
-        console.log(
-            "NOTIFY:",
-            notifyFound || "NOT FOUND"
-        );
-
-        console.log(
-            "========================================"
-        );
-
-        return {
-
-            supported:
-                true,
-
-            selected:
-                true,
-
-            name:
-                selected.name || "",
-
-            id:
-                selected.id || "",
-
-            gatt:
-                true,
-
-            services:
-                serviceResults,
-
-            write:
-                writeFound,
-
-            notify:
-                notifyFound
-
-        };
-
-    }
-
-    catch (err) {
-
-        console.error(
-            "[Diagnostic] GATT/service error:",
-            err
-        );
-
-        return {
-
-            supported:
-                true,
-
-            selected:
-                true,
-
-            name:
-                selected.name || "",
-
-            id:
-                selected.id || "",
-
-            gatt:
-                Boolean(
-                    selected.gatt
-                ),
-
-            error:
-                err
-
-        };
-
-    }
-
-}
     /*
     =====================================================
      PUBLIC API
@@ -3201,6 +3663,8 @@ async function diagnosePrinter() {
 
         printRaw: printRaw,
 
+        testRaw: testRaw,
+
         isConnected: isConnected,
 
         getDevice: getDevice,
@@ -3217,7 +3681,9 @@ async function diagnosePrinter() {
 
         forgetDevice: forgetDevice,
 
-        discoverServices: discoverServices
+        discoverServices: discoverServices,
+
+        diagnosePrinter: diagnosePrinter
 
     };
 
@@ -3241,7 +3707,12 @@ async function diagnosePrinter() {
     =====================================================
     */
 
-    console.log("========================================");
+    console.log(
+
+        "========================================"
+
+    );
+
 
     console.log(
 
@@ -3253,7 +3724,13 @@ async function diagnosePrinter() {
 
     );
 
-    console.log("========================================");
+
+    console.log(
+
+        "========================================"
+
+    );
+
 
     console.log(
 
@@ -3261,9 +3738,19 @@ async function diagnosePrinter() {
 
     );
 
+
     console.log(
 
         "RAW Uint8Array Transport"
+
+    );
+
+
+    console.log(
+
+        "Diagnostic:",
+
+        "Bluetooth.diagnosePrinter()"
 
     );
 
@@ -3314,5 +3801,6 @@ async function diagnosePrinter() {
         start();
 
     }
+
 
 })();
