@@ -1,62 +1,74 @@
 "use strict";
 
 /*
-=====================================================
- SmartPrint Printer Manager v4.2
-=====================================================
+==========================================================
+ SmartPrint Printer Manager v4.2.0
+ by AppDIGI
+==========================================================
 
  PURPOSE
- ----------------------------------------------------
- Central Printer Manager untuk SmartPrint.
+ ---------------------------------------------------------
+ Printer Manager untuk SmartPrint.
 
- TRANSPORT
- ----------------------------------------------------
- ✓ BLE / Web Bluetooth
- ✓ Web Serial / COM
- ✓ Local Bridge
- ✓ USB / System Printer compatibility
-
- BLUETOOTH ENGINE
- ----------------------------------------------------
- Compatible:
- SmartPrint Bluetooth Engine v5.7+
-
- USER CONNECT
- ----------------------------------------------------
- Printer.connect()
-      ↓
- Bluetooth.connectUser()
-      ↓
- BLE picker
-      ↓
- GATT
-      ↓
- WRITE characteristic
-
- AUTO CONNECT
- ----------------------------------------------------
- Printer.autoConnectPrinter()
-      ↓
- Bluetooth.autoConnect()
+ TARGET
+ ---------------------------------------------------------
+ - Bluetooth BLE
+ - Web Serial
+ - Bridge
+ - RAW Uint8Array
+ - TSPL
+ - ESC/POS
+ - Text
+ - Barcode
+ - QR Code
+ - Image
+ - Adaptive Paper / Label Size
+ - Transparent Background
+ - Black Ink Objects
 
  IMPORTANT
- ----------------------------------------------------
- autoConnect() TIDAK BOLEH membuka picker.
+ ---------------------------------------------------------
+ Printer Manager TIDAK mengatur Preview Engine.
 
- BLE requestDevice()
- HARUS berasal dari user gesture.
+ Preview hanya menghasilkan object/data.
+ Printer Manager bertugas mengubah object menjadi
+ printer command.
 
- SERIAL requestPort()
- HARUS berasal dari user gesture.
+ PAPER
+ ---------------------------------------------------------
+ Ukuran kertas/label TIDAK dikunci.
 
- PRINT ROUTING
- ----------------------------------------------------
- ESC
- TSPL
- ZPL
- CPCL
+ Dibaca dari:
+    Settings.labelWidth
+    Settings.labelHeight
+    Settings.paperWidth
+    Settings.paperHeight
+    Settings.dpi
 
- ====================================================
+ Contoh:
+    100 x 150 mm
+    58 x 40 mm
+    80 x 50 mm
+    dll.
+
+ TRANSPARENT PRINT
+ ---------------------------------------------------------
+ Background putih TIDAK dikirim.
+
+ Hanya object yang mempunyai data yang dicetak.
+
+ DEFAULT COLOR
+ ---------------------------------------------------------
+ Black / #000000
+
+ TRANSPORT
+ ---------------------------------------------------------
+ Bluetooth.sendRaw(Uint8Array)
+
+ Compatible dengan:
+ SmartPrint Bluetooth Engine v5.7.0
+
+==========================================================
 */
 
 
@@ -66,3161 +78,2311 @@
 
 
     /*
-    =================================================
+    ======================================================
      VERSION
-    =================================================
+    ======================================================
     */
 
     const VERSION = "4.2.0";
 
 
     /*
-    =================================================
-     PRINTER MANAGER
-    =================================================
+    ======================================================
+     CONSTANT
+    ======================================================
     */
 
-    const PrinterManager = {
+    const MM_PER_INCH = 25.4;
 
 
-        /*
-        =============================================
-         VERSION
-        =============================================
-        */
+    /*
+    ======================================================
+     STATE
+    ======================================================
+    */
 
-        version: VERSION,
+    let initialized = false;
+
+    let printing = false;
+
+    let connected = false;
+
+    let currentLanguage = "ESC";
+
+    let currentPrinter = null;
+
+    let lastJob = null;
 
 
-        /*
-        =============================================
-         DEFAULT SETTINGS
-        =============================================
-        */
+    /*
+    ======================================================
+     DEFAULT SETTINGS
+    ======================================================
+    */
 
-        printerType: "bluetooth",
+    const DEFAULT_SETTINGS = {
 
-        printerName: "",
+        appName:
+            "SmartPrint by AppDIGI",
 
-        language: "TSPL",
+        version:
+            VERSION,
 
-        paperWidth: 576,
-
-        paperHeight: 1200,
-
-        dpi: 203,
-
-        copies: 1,
-
-        density: 8,
-
-        speed: 4,
-
-        autoConnect: true,
-
-        cutPaper: false,
-
-        openDrawer: false,
-
+        language:
+            "id",
 
         /*
-        =============================================
-         STATE
-        =============================================
-        */
+         * Printer
+         */
 
-        connected: false,
+        printerName:
+            "",
 
-        connecting: false,
+        printLanguage:
+            "ESC",
 
-        printing: false,
+        paperWidth:
+            80,
 
-        initialized: false,
+        paperHeight:
+            150,
 
-        lastError: null,
+        labelWidth:
+            100,
 
-        connectionType: null,
+        labelHeight:
+            150,
 
+        gap:
+            2,
 
-        /*
-        =============================================
-         INIT
-        =============================================
-        */
+        marginLeft:
+            0,
 
-        async init() {
+        marginTop:
+            0,
 
-            if (this.initialized) {
+        dpi:
+            203,
 
-                return true;
+        copies:
+            1,
 
-            }
+        density:
+            8,
 
+        speed:
+            4,
 
-            console.log(
-                "========================================"
-            );
+        cutPaper:
+            false,
 
-            console.log(
-                "SmartPrint Printer Manager v" +
-                VERSION
-            );
+        openDrawer:
+            false,
 
-            console.log(
-                "========================================"
-            );
-
-
-            /*
-            =========================================
-             LOAD SETTINGS
-            =========================================
-            */
-
-            this.loadSettings();
-
-
-            /*
-            =========================================
-             INITIAL STATE
-            =========================================
-            */
-
-            this.initialized =
-                true;
-
-            this.connected =
-                false;
-
-            this.connecting =
-                false;
-
-            this.printing =
-                false;
-
-            this.connectionType =
-                null;
-
-            this.lastError =
-                null;
-
-
-            this.updateStatus(
-                "disconnected"
-            );
-
-
-            /*
-            =========================================
-             AUTO CONNECT
-            =========================================
-
-             IMPORTANT:
-
-             Tidak membuka picker.
-
-             Hanya mencoba device yang sudah
-             diberikan permission browser.
-
-            =========================================
-            */
-
-            if (
-                this.autoConnect &&
-                this.printerType ===
-                "bluetooth"
-            ) {
-
-                await this.waitForBluetooth();
-
-
-                try {
-
-                    const result =
-                        await this.autoConnectPrinter();
-
-
-                    if (result) {
-
-                        console.log(
-                            "Printer Auto Connected:",
-                            this.printerName
-                        );
-
-                    }
-
-                }
-
-                catch (error) {
-
-                    console.warn(
-                        "Printer Auto Connect gagal:",
-                        error
-                    );
-
-                }
-
-            }
-
-
-            console.log(
-                "Printer Manager initialized."
-            );
-
-
-            return true;
-
-        },
-
+        rotate:
+            0,
 
         /*
-        =================================================
-         WAIT BLUETOOTH ENGINE
-        =================================================
-        */
+         * Barcode
+         */
 
-        async waitForBluetooth(
-            timeout = 5000
-        ) {
+        barcodeType:
+            "CODE128",
 
-            const start =
-                Date.now();
+        barcodeWidth:
+            2,
 
+        barcodeHeight:
+            50,
 
-            while (
-                typeof Bluetooth ===
-                "undefined"
-            ) {
-
-                if (
-                    Date.now() -
-                    start >
-                    timeout
-                ) {
-
-                    console.warn(
-                        "Bluetooth Engine tidak ditemukan."
-                    );
-
-
-                    return false;
-
-                }
-
-
-                await this.sleep(
-                    100
-                );
-
-            }
-
-
-            return true;
-
-        },
-
+        barcodeHumanReadable:
+            true,
 
         /*
-        =================================================
-         USER CONNECT
-        =================================================
+         * QR
+         */
 
-         Fungsi utama tombol CONNECT.
+        qrSize:
+            100,
 
-         BLE:
-             Bluetooth.connectUser()
-
-         Tidak menggunakan autoConnect.
-
-        =================================================
-        */
-
-        async connect() {
-
-            /*
-            =========================================
-             PREVENT DOUBLE CONNECT
-            =========================================
-            */
-
-            if (
-                this.connecting
-            ) {
-
-                console.warn(
-                    "Printer sedang connecting."
-                );
-
-
-                return false;
-
-            }
-
-
-            /*
-            =========================================
-             SUDAH CONNECTED
-            =========================================
-            */
-
-            if (
-                this.isConnected()
-            ) {
-
-                console.log(
-                    "Printer sudah terhubung."
-                );
-
-
-                this.updateStatus(
-                    "connected"
-                );
-
-
-                return true;
-
-            }
-
-
-            this.connecting =
-                true;
-
-            this.lastError =
-                null;
-
-
-            this.updateStatus(
-                "connecting"
-            );
-
-
-            try {
-
-                await this.waitForBluetooth();
-
-
-                console.log(
-                    "========================================"
-                );
-
-                console.log(
-                    "SMARTPRINT PRINTER USER CONNECT v4.2"
-                );
-
-                console.log(
-                    "========================================"
-                );
-
-
-                /*
-                =========================================
-                 BLUETOOTH
-                =========================================
-                */
-
-                if (
-                    this.printerType ===
-                    "bluetooth"
-                ) {
-
-                    return await this.connectBluetoothUser();
-
-                }
-
-
-                /*
-                =========================================
-                 USB
-                =========================================
-                */
-
-                if (
-                    this.printerType ===
-                    "usb"
-                ) {
-
-                    return await this.connectUSB();
-
-                }
-
-
-                /*
-                =========================================
-                 SYSTEM
-                =========================================
-                */
-
-                if (
-                    this.printerType ===
-                    "system"
-                ) {
-
-                    return await this.connectSystem();
-
-                }
-
-
-                throw new Error(
-                    "Printer type tidak didukung: " +
-                    this.printerType
-                );
-
-            }
-
-            catch (error) {
-
-                this.lastError =
-                    error;
-
-
-                this.connected =
-                    false;
-
-
-                this.connectionType =
-                    null;
-
-
-                console.error(
-                    "Printer Connect Error:",
-                    error
-                );
-
-
-                this.handleConnectionError(
-                    error
-                );
-
-
-                return false;
-
-            }
-
-            finally {
-
-                this.connecting =
-                    false;
-
-            }
-
-        },
-
-
-        /*
-        =================================================
-         CONNECT BLUETOOTH USER
-        =================================================
-
-         KHUSUS USER GESTURE.
-
-         Jangan panggil dari autoConnect.
-
-        =================================================
-        */
-
-        async connectBluetoothUser() {
-
-            if (
-                typeof Bluetooth ===
-                "undefined"
-            ) {
-
-                throw new Error(
-                    "Bluetooth Engine tidak ditemukan."
-                );
-
-            }
-
-
-            /*
-            =========================================
-             PREFER connectUser()
-            =========================================
-            */
-
-            if (
-                typeof Bluetooth.connectUser ===
-                "function"
-            ) {
-
-                console.log(
-                    "Bluetooth.connectUser()"
-                );
-
-
-                const result =
-                    await Bluetooth.connectUser();
-
-
-                if (
-                    !result
-                ) {
-
-                    this.connected =
-                        false;
-
-                    this.connectionType =
-                        null;
-
-
-                    this.updateStatus(
-                        "disconnected"
-                    );
-
-
-                    return false;
-
-                }
-
-            }
-
-            else if (
-                typeof Bluetooth.connectBLE ===
-                "function"
-            ) {
-
-                console.log(
-                    "Bluetooth.connectBLE()"
-                );
-
-
-                const result =
-                    await Bluetooth.connectBLE();
-
-
-                if (
-                    !result
-                ) {
-
-                    this.connected =
-                        false;
-
-                    this.connectionType =
-                        null;
-
-
-                    this.updateStatus(
-                        "disconnected"
-                    );
-
-
-                    return false;
-
-                }
-
-            }
-
-            else {
-
-                throw new Error(
-                    "Bluetooth user connection API tidak tersedia."
-                );
-
-            }
-
-
-            /*
-            =========================================
-             CHECK CONNECTION
-            =========================================
-            */
-
-            this.connected =
-                this.bluetoothIsConnected();
-
-
-            if (
-                !this.connected
-            ) {
-
-                this.connectionType =
-                    null;
-
-
-                this.updateStatus(
-                    "disconnected"
-                );
-
-
-                return false;
-
-            }
-
-
-            this.connectionType =
-                this.getBluetoothConnectionType();
-
-
-            /*
-            =========================================
-             DEVICE NAME
-            =========================================
-            */
-
-            if (
-                typeof Bluetooth.getDeviceName ===
-                "function"
-            ) {
-
-                const name =
-                    Bluetooth.getDeviceName();
-
-
-                if (
-                    name
-                ) {
-
-                    this.printerName =
-                        name;
-
-                }
-
-            }
-
-
-            /*
-            =========================================
-             SAVE
-            =========================================
-            */
-
-            this.updateStatus(
-                "connected"
-            );
-
-
-            this.saveSettings();
-
-
-            console.log(
-                "Printer Connected:",
-                this.printerName ||
-                "(unknown)"
-            );
-
-
-            console.log(
-                "Connection Type:",
-                this.connectionType ||
-                "BLUETOOTH"
-            );
-
-
-            return true;
-
-        },
-
-
-        /*
-        =================================================
-         EXPLICIT BLE CONNECT
-        =================================================
-        */
-
-        async connectBluetooth() {
-
-            if (
-                this.connecting
-            ) {
-
-                return false;
-
-            }
-
-
-            this.connecting =
-                true;
-
-
-            this.updateStatus(
-                "connecting"
-            );
-
-
-            try {
-
-                return await this.connectBluetoothUser();
-
-            }
-
-            catch (error) {
-
-                this.lastError =
-                    error;
-
-
-                this.connected =
-                    false;
-
-
-                this.connectionType =
-                    null;
-
-
-                this.handleConnectionError(
-                    error
-                );
-
-
-                return false;
-
-            }
-
-            finally {
-
-                this.connecting =
-                    false;
-
-            }
-
-        },
-
-
-        /*
-        =================================================
-         SERIAL / COM
-        =================================================
-
-         HARUS dipanggil langsung dari tombol.
-
-        =================================================
-        */
-
-        async connectSerial() {
-
-            if (
-                this.connecting
-            ) {
-
-                console.warn(
-                    "Printer sedang connecting."
-                );
-
-
-                return false;
-
-            }
-
-
-            if (
-                typeof Bluetooth ===
-                "undefined"
-            ) {
-
-                console.error(
-                    "Bluetooth Engine tidak ditemukan."
-                );
-
-
-                return false;
-
-            }
-
-
-            if (
-                typeof Bluetooth.connectSerial !==
-                "function"
-            ) {
-
-                console.error(
-                    "Bluetooth.connectSerial() tidak tersedia."
-                );
-
-
-                return false;
-
-            }
-
-
-            this.connecting =
-                true;
-
-            this.lastError =
-                null;
-
-
-            this.updateStatus(
-                "connecting"
-            );
-
-
-            try {
-
-                console.log(
-                    "========================================"
-                );
-
-                console.log(
-                    "SMARTPRINT SERIAL / COM CONNECT v4.2"
-                );
-
-                console.log(
-                    "========================================"
-                );
-
-
-                /*
-                =========================================
-                 requestPort()
-                 =========================================
-
-                 Harus berasal dari event click user.
-
-                =========================================
-                */
-
-                const result =
-                    await Bluetooth.connectSerial();
-
-
-                if (
-                    !result
-                ) {
-
-                    this.connected =
-                        false;
-
-                    this.connectionType =
-                        null;
-
-
-                    this.updateStatus(
-                        "disconnected"
-                    );
-
-
-                    return false;
-
-                }
-
-
-                this.connected =
-                    this.bluetoothIsConnected();
-
-
-                if (
-                    !this.connected
-                ) {
-
-                    this.connectionType =
-                        null;
-
-
-                    this.updateStatus(
-                        "disconnected"
-                    );
-
-
-                    return false;
-
-                }
-
-
-                this.connectionType =
-                    "SERIAL";
-
-
-                /*
-                =========================================
-                 NAME
-                =========================================
-                */
-
-                if (
-                    typeof Bluetooth.getDeviceName ===
-                    "function"
-                ) {
-
-                    const name =
-                        Bluetooth.getDeviceName();
-
-
-                    if (
-                        name
-                    ) {
-
-                        this.printerName =
-                            name;
-
-                    }
-
-                }
-
-
-                this.updateStatus(
-                    "connected"
-                );
-
-
-                this.saveSettings();
-
-
-                console.log(
-                    "Serial / COM Connected."
-                );
-
-
-                return true;
-
-            }
-
-            catch (error) {
-
-                this.lastError =
-                    error;
-
-
-                this.connected =
-                    false;
-
-
-                this.connectionType =
-                    null;
-
-
-                this.handleConnectionError(
-                    error
-                );
-
-
-                return false;
-
-            }
-
-            finally {
-
-                this.connecting =
-                    false;
-
-            }
-
-        },
-
-
-        /*
-        =================================================
-         BRIDGE CONNECT
-        =================================================
-        */
-
-        async connectBridge() {
-
-            if (
-                this.connecting
-            ) {
-
-                return false;
-
-            }
-
-
-            if (
-                typeof Bluetooth ===
-                "undefined"
-            ) {
-
-                console.error(
-                    "Bluetooth Engine tidak ditemukan."
-                );
-
-
-                return false;
-
-            }
-
-
-            if (
-                typeof Bluetooth.connectBridge !==
-                "function"
-            ) {
-
-                console.error(
-                    "Bluetooth.connectBridge() tidak tersedia."
-                );
-
-
-                return false;
-
-            }
-
-
-            this.connecting =
-                true;
-
-            this.lastError =
-                null;
-
-
-            this.updateStatus(
-                "connecting"
-            );
-
-
-            try {
-
-                const result =
-                    await Bluetooth.connectBridge();
-
-
-                if (
-                    !result
-                ) {
-
-                    this.connected =
-                        false;
-
-                    this.connectionType =
-                        null;
-
-
-                    this.updateStatus(
-                        "disconnected"
-                    );
-
-
-                    return false;
-
-                }
-
-
-                this.connected =
-                    this.bluetoothIsConnected();
-
-
-                if (
-                    !this.connected
-                ) {
-
-                    this.connectionType =
-                        null;
-
-
-                    this.updateStatus(
-                        "disconnected"
-                    );
-
-
-                    return false;
-
-                }
-
-
-                this.connectionType =
-                    "BRIDGE";
-
-
-                this.updateStatus(
-                    "connected"
-                );
-
-
-                this.saveSettings();
-
-
-                console.log(
-                    "Local Bridge Connected."
-                );
-
-
-                return true;
-
-            }
-
-            catch (error) {
-
-                this.lastError =
-                    error;
-
-
-                this.connected =
-                    false;
-
-
-                this.connectionType =
-                    null;
-
-
-                console.error(
-                    "Bridge Connect Error:",
-                    error
-                );
-
-
-                this.updateStatus(
-                    "error"
-                );
-
-
-                return false;
-
-            }
-
-            finally {
-
-                this.connecting =
-                    false;
-
-            }
-
-        },
-
-
-        /*
-        =================================================
-         USB CONNECT
-        =================================================
-        */
-
-        async connectUSB() {
-
-            if (
-                typeof USBPrinter ===
-                "undefined"
-            ) {
-
-                throw new Error(
-                    "USB Printer Engine belum tersedia."
-                );
-
-            }
-
-
-            if (
-                typeof USBPrinter.connect !==
-                "function"
-            ) {
-
-                throw new Error(
-                    "USBPrinter.connect() belum tersedia."
-                );
-
-            }
-
-
-            const result =
-                await USBPrinter.connect();
-
-
-            this.connected =
-                Boolean(
-                    result
-                );
-
-
-            if (
-                this.connected
-            ) {
-
-                this.connectionType =
-                    "USB";
-
-
-                this.updateStatus(
-                    "connected"
-                );
-
-
-                this.saveSettings();
-
-            }
-
-            else {
-
-                this.connectionType =
-                    null;
-
-
-                this.updateStatus(
-                    "disconnected"
-                );
-
-            }
-
-
-            return this.connected;
-
-        },
-
-
-        /*
-        =================================================
-         SYSTEM PRINTER CONNECT
-        =================================================
-        */
-
-        async connectSystem() {
-
-            if (
-                typeof SystemPrinter ===
-                "undefined"
-            ) {
-
-                throw new Error(
-                    "System Printer Engine belum tersedia."
-                );
-
-            }
-
-
-            if (
-                typeof SystemPrinter.connect !==
-                "function"
-            ) {
-
-                throw new Error(
-                    "SystemPrinter.connect() belum tersedia."
-                );
-
-            }
-
-
-            const result =
-                await SystemPrinter.connect();
-
-
-            this.connected =
-                Boolean(
-                    result
-                );
-
-
-            if (
-                this.connected
-            ) {
-
-                this.connectionType =
-                    "SYSTEM";
-
-
-                this.updateStatus(
-                    "connected"
-                );
-
-
-                this.saveSettings();
-
-            }
-
-            else {
-
-                this.connectionType =
-                    null;
-
-
-                this.updateStatus(
-                    "disconnected"
-                );
-
-            }
-
-
-            return this.connected;
-
-        },
-
-
-        /*
-        =================================================
-         AUTO CONNECT
-        =================================================
-
-         IMPORTANT:
-
-         Tidak membuka picker.
-
-        =================================================
-        */
-
-        async autoConnectPrinter() {
-
-            if (
-                this.printerType !==
-                "bluetooth"
-            ) {
-
-                return false;
-
-            }
-
-
-            await this.waitForBluetooth();
-
-
-            if (
-                typeof Bluetooth ===
-                "undefined"
-            ) {
-
-                return false;
-
-            }
-
-
-            if (
-                typeof Bluetooth.autoConnect !==
-                "function"
-            ) {
-
-                console.warn(
-                    "Bluetooth.autoConnect() tidak tersedia."
-                );
-
-
-                return false;
-
-            }
-
-
-            /*
-            =========================================
-             AUTO CONNECT
-            =========================================
-
-             Browser permission diperlukan.
-
-             Jangan requestDevice() di sini.
-
-            =========================================
-            */
-
-            try {
-
-                console.log(
-                    "Printer Auto Connect..."
-                );
-
-
-                const result =
-                    await Bluetooth.autoConnect();
-
-
-                this.connected =
-                    Boolean(
-                        result
-                    );
-
-
-                if (
-                    this.connected
-                ) {
-
-                    this.connectionType =
-                        this.getBluetoothConnectionType();
-
-
-                    if (
-                        typeof Bluetooth.getDeviceName ===
-                        "function"
-                    ) {
-
-                        const name =
-                            Bluetooth.getDeviceName();
-
-
-                        if (
-                            name
-                        ) {
-
-                            this.printerName =
-                                name;
-
-                        }
-
-                    }
-
-
-                    this.updateStatus(
-                        "connected"
-                    );
-
-
-                    this.saveSettings();
-
-
-                    console.log(
-                        "Printer Auto Connected:",
-                        this.printerName
-                    );
-
-
-                    return true;
-
-                }
-
-
-                this.connected =
-                    false;
-
-                this.connectionType =
-                    null;
-
-
-                this.updateStatus(
-                    "disconnected"
-                );
-
-
-                return false;
-
-            }
-
-            catch (error) {
-
-                this.lastError =
-                    error;
-
-
-                this.connected =
-                    false;
-
-
-                this.connectionType =
-                    null;
-
-
-                console.warn(
-                    "Printer Auto Connect Error:",
-                    error
-                );
-
-
-                this.updateStatus(
-                    "disconnected"
-                );
-
-
-                return false;
-
-            }
-
-        },
-
-
-        /*
-        =================================================
-         LEGACY AUTO CONNECT
-        =================================================
-        */
-
-        autoConnectLegacy() {
-
-            return this.autoConnectPrinter();
-
-        },
-
-
-        /*
-        =================================================
-         BLUETOOTH CONNECTION CHECK
-        =================================================
-        */
-
-        bluetoothIsConnected() {
-
-            if (
-                typeof Bluetooth ===
-                "undefined"
-            ) {
-
-                return false;
-
-            }
-
-
-            if (
-                typeof Bluetooth.isConnected ===
-                "function"
-            ) {
-
-                try {
-
-                    return Boolean(
-                        Bluetooth.isConnected()
-                    );
-
-                }
-
-                catch (error) {
-
-                    console.warn(
-                        "Bluetooth.isConnected error:",
-                        error
-                    );
-
-
-                    return false;
-
-                }
-
-            }
-
-
-            /*
-            =========================================
-             FALLBACK getInfo()
-            =========================================
-            */
-
-            if (
-                typeof Bluetooth.getInfo ===
-                "function"
-            ) {
-
-                try {
-
-                    const info =
-                        Bluetooth.getInfo();
-
-
-                    return Boolean(
-                        info &&
-                        info.connected
-                    );
-
-                }
-
-                catch (error) {
-
-                    return false;
-
-                }
-
-            }
-
-
-            return false;
-
-        },
-
-
-        /*
-        =================================================
-         GET BLUETOOTH CONNECTION TYPE
-        =================================================
-        */
-
-        getBluetoothConnectionType() {
-
-            if (
-                typeof Bluetooth ===
-                "undefined"
-            ) {
-
-                return null;
-
-            }
-
-
-            if (
-                typeof Bluetooth.getConnectionType ===
-                "function"
-            ) {
-
-                try {
-
-                    return (
-                        Bluetooth.getConnectionType()
-                        ||
-                        "BLUETOOTH"
-                    );
-
-                }
-
-                catch (error) {}
-
-            }
-
-
-            if (
-                typeof Bluetooth.getInfo ===
-                "function"
-            ) {
-
-                try {
-
-                    const info =
-                        Bluetooth.getInfo();
-
-
-                    if (
-                        info &&
-                        info.type
-                    ) {
-
-                        return info.type;
-
-                    }
-
-                }
-
-                catch (error) {}
-
-            }
-
-
-            return "BLUETOOTH";
-
-        },
-
-
-        /*
-        =================================================
-         IS CONNECTED
-        =================================================
-        */
-
-        isConnected() {
-
-            /*
-            =========================================
-             BLUETOOTH
-            =========================================
-            */
-
-            if (
-                this.printerType ===
-                "bluetooth"
-            ) {
-
-                this.connected =
-                    this.bluetoothIsConnected();
-
-
-                if (
-                    !this.connected
-                ) {
-
-                    this.connectionType =
-                        null;
-
-                }
-
-
-                return this.connected;
-
-            }
-
-
-            /*
-            =========================================
-             USB
-            =========================================
-            */
-
-            if (
-                this.printerType ===
-                "usb"
-            ) {
-
-                if (
-                    typeof USBPrinter !==
-                    "undefined" &&
-                    typeof USBPrinter.isConnected ===
-                    "function"
-                ) {
-
-                    this.connected =
-                        Boolean(
-                            USBPrinter.isConnected()
-                        );
-
-
-                    return this.connected;
-
-                }
-
-
-                return false;
-
-            }
-
-
-            /*
-            =========================================
-             SYSTEM
-            =========================================
-            */
-
-            if (
-                this.printerType ===
-                "system"
-            ) {
-
-                if (
-                    typeof SystemPrinter !==
-                    "undefined" &&
-                    typeof SystemPrinter.isConnected ===
-                    "function"
-                ) {
-
-                    this.connected =
-                        Boolean(
-                            SystemPrinter.isConnected()
-                        );
-
-
-                    return this.connected;
-
-                }
-
-
-                return false;
-
-            }
-
-
-            return false;
-
-        },
-
-
-        /*
-        =================================================
-         DISCONNECT
-        =================================================
-        */
-
-        async disconnect() {
-
-            console.log(
-                "Printer Disconnect"
-            );
-
-
-            try {
-
-                /*
-                =========================================
-                 BLUETOOTH
-                =========================================
-                */
-
-                if (
-                    this.printerType ===
-                    "bluetooth"
-                ) {
-
-                    if (
-                        typeof Bluetooth !==
-                        "undefined" &&
-                        typeof Bluetooth.disconnect ===
-                        "function"
-                    ) {
-
-                        await Bluetooth.disconnect();
-
-                    }
-
-                }
-
-
-                /*
-                =========================================
-                 USB
-                =========================================
-                */
-
-                else if (
-                    this.printerType ===
-                    "usb"
-                ) {
-
-                    if (
-                        typeof USBPrinter !==
-                        "undefined" &&
-                        typeof USBPrinter.disconnect ===
-                        "function"
-                    ) {
-
-                        await USBPrinter.disconnect();
-
-                    }
-
-                }
-
-
-                /*
-                =========================================
-                 SYSTEM
-                =========================================
-                */
-
-                else if (
-                    this.printerType ===
-                    "system"
-                ) {
-
-                    if (
-                        typeof SystemPrinter !==
-                        "undefined" &&
-                        typeof SystemPrinter.disconnect ===
-                        "function"
-                    ) {
-
-                        await SystemPrinter.disconnect();
-
-                    }
-
-                }
-
-            }
-
-            catch (error) {
-
-                console.error(
-                    "Printer Disconnect Error:",
-                    error
-                );
-
-            }
-
-
-            this.connected =
-                false;
-
-
-            this.connectionType =
-                null;
-
-
-            this.connecting =
-                false;
-
-
-            this.updateStatus(
-                "disconnected"
-            );
-
-
-            return true;
-
-        },
-
-
-        /*
-        =================================================
-         PRINT
-        =================================================
-        */
-
-        async print(canvas) {
-
-            if (
-                this.printing
-            ) {
-
-                throw new Error(
-                    "Printer sedang mencetak."
-                );
-
-            }
-
-
-            if (!canvas) {
-
-                throw new Error(
-                    "Canvas tidak tersedia."
-                );
-
-            }
-
-
-            if (
-                !this.isConnected()
-            ) {
-
-                throw new Error(
-                    "Printer belum terhubung."
-                );
-
-            }
-
-
-            this.printing =
-                true;
-
-
-            this.updateStatus(
-                "printing"
-            );
-
-
-            try {
-
-                let result;
-
-
-                /*
-                =========================================
-                 ESC
-                =========================================
-                */
-
-                if (
-                    this.language ===
-                    "ESC"
-                ) {
-
-                    if (
-                        typeof ESCpos ===
-                        "undefined"
-                    ) {
-
-                        throw new Error(
-                            "ESCpos Engine tidak ditemukan."
-                        );
-
-                    }
-
-
-                    if (
-                        typeof ESCpos.print !==
-                        "function"
-                    ) {
-
-                        throw new Error(
-                            "ESCpos.print() tidak tersedia."
-                        );
-
-                    }
-
-
-                    result =
-                        await ESCpos.print(
-                            canvas,
-                            this
-                        );
-
-                }
-
-
-                /*
-                =========================================
-                 TSPL
-                =========================================
-                */
-
-                else if (
-                    this.language ===
-                    "TSPL"
-                ) {
-
-                    if (
-                        typeof TSPL ===
-                        "undefined"
-                    ) {
-
-                        throw new Error(
-                            "TSPL Engine tidak ditemukan."
-                        );
-
-                    }
-
-
-                    if (
-                        typeof TSPL.print !==
-                        "function"
-                    ) {
-
-                        throw new Error(
-                            "TSPL.print() tidak tersedia."
-                        );
-
-                    }
-
-
-                    result =
-                        await TSPL.print(
-                            canvas,
-                            this
-                        );
-
-                }
-
-
-                /*
-                =========================================
-                 ZPL
-                =========================================
-                */
-
-                else if (
-                    this.language ===
-                    "ZPL"
-                ) {
-
-                    if (
-                        typeof ZPL ===
-                        "undefined"
-                    ) {
-
-                        throw new Error(
-                            "ZPL Engine tidak ditemukan."
-                        );
-
-                    }
-
-
-                    if (
-                        typeof ZPL.print !==
-                        "function"
-                    ) {
-
-                        throw new Error(
-                            "ZPL.print() tidak tersedia."
-                        );
-
-                    }
-
-
-                    result =
-                        await ZPL.print(
-                            canvas,
-                            this
-                        );
-
-                }
-
-
-                /*
-                =========================================
-                 CPCL
-                =========================================
-                */
-
-                else if (
-                    this.language ===
-                    "CPCL"
-                ) {
-
-                    if (
-                        typeof CPCL ===
-                        "undefined"
-                    ) {
-
-                        throw new Error(
-                            "CPCL Engine tidak ditemukan."
-                        );
-
-                    }
-
-
-                    if (
-                        typeof CPCL.print !==
-                        "function"
-                    ) {
-
-                        throw new Error(
-                            "CPCL.print() tidak tersedia."
-                        );
-
-                    }
-
-
-                    result =
-                        await CPCL.print(
-                            canvas,
-                            this
-                        );
-
-                }
-
-
-                else {
-
-                    throw new Error(
-                        "Printer language tidak didukung: " +
-                        this.language
-                    );
-
-                }
-
-
-                /*
-                =========================================
-                 PRINT SUCCESS
-                =========================================
-                */
-
-                this.updateStatus(
-                    "connected"
-                );
-
-
-                return result;
-
-            }
-
-            catch (error) {
-
-                console.error(
-                    "Print Error:",
-                    error
-                );
-
-
-                this.lastError =
-                    error;
-
-
-                this.updateStatus(
-                    this.isConnected()
-                        ? "connected"
-                        : "error"
-                );
-
-
-                throw error;
-
-            }
-
-            finally {
-
-                this.printing =
-                    false;
-
-            }
-
-        },
-
-
-        /*
-        =================================================
-         SET PRINTER TYPE
-        =================================================
-        */
-
-        setPrinterType(type) {
-
-            const allowedTypes = [
-
-                "bluetooth",
-
-                "usb",
-
-                "system"
-
-            ];
-
-
-            type =
-                String(
-                    type || ""
-                )
-                .toLowerCase()
-                .trim();
-
-
-            if (
-                !allowedTypes.includes(
-                    type
-                )
-            ) {
-
-                console.warn(
-                    "Printer type tidak valid:",
-                    type
-                );
-
-
-                return false;
-
-            }
-
-
-            if (
-                this.isConnected()
-            ) {
-
-                this.disconnect();
-
-            }
-
-
-            this.printerType =
-                type;
-
-
-            this.saveSettings();
-
-
-            console.log(
-                "Printer Type:",
-                type
-            );
-
-
-            return true;
-
-        },
-
-
-        /*
-        =================================================
-         SET PRINTER NAME
-        =================================================
-        */
-
-        setPrinterName(name) {
-
-            this.printerName =
-                String(
-                    name || ""
-                );
-
-
-            this.saveSettings();
-
-        },
-
-
-        /*
-        =================================================
-         SET LANGUAGE
-        =================================================
-        */
-
-        setLanguage(language) {
-
-            this.language =
-                String(
-                    language ||
-                    "TSPL"
-                )
-                .toUpperCase()
-                .trim();
-
-
-            this.saveSettings();
-
-
-            console.log(
-                "Printer Language:",
-                this.language
-            );
-
-        },
-
-
-        /*
-        =================================================
-         SET PAPER
-        =================================================
-        */
-
-        setPaper(
-            width,
-            height
-        ) {
-
-            this.paperWidth =
-                Number(width) ||
-                576;
-
-
-            if (
-                height !==
-                undefined
-            ) {
-
-                this.paperHeight =
-                    Number(height) ||
-                    1200;
-
-            }
-
-
-            this.saveSettings();
-
-        },
-
-
-        /*
-        =================================================
-         SET DPI
-        =================================================
-        */
-
-        setDPI(dpi) {
-
-            this.dpi =
-                Number(dpi) ||
-                203;
-
-
-            this.saveSettings();
-
-        },
-
-
-        /*
-        =================================================
-         SET COPIES
-        =================================================
-        */
-
-        setCopies(copies) {
-
-            this.copies =
-                Math.max(
-                    1,
-                    Number(copies) ||
-                    1
-                );
-
-
-            this.saveSettings();
-
-        },
-
-
-        /*
-        =================================================
-         SET DENSITY
-        =================================================
-        */
-
-        setDensity(density) {
-
-            this.density =
-                Math.max(
-                    0,
-                    Number(density) ||
-                    0
-                );
-
-
-            this.saveSettings();
-
-        },
-
-
-        /*
-        =================================================
-         SET SPEED
-        =================================================
-        */
-
-        setSpeed(speed) {
-
-            this.speed =
-                Math.max(
-                    1,
-                    Number(speed) ||
-                    1
-                );
-
-
-            this.saveSettings();
-
-        },
-
-
-        /*
-        =================================================
-         SET AUTO CONNECT
-        =================================================
-        */
-
-        setAutoConnect(enabled) {
-
-            this.autoConnect =
-                Boolean(
-                    enabled
-                );
-
-
-            this.saveSettings();
-
-        },
-
-
-        /*
-        =================================================
-         STATUS
-        =================================================
-        */
-
-        updateStatus(state) {
-
-            const status =
-                document.getElementById(
-                    "printerStatus"
-                );
-
-
-            const globalStatus =
-                document.getElementById(
-                    "status"
-                );
-
-
-            const dot =
-                document.querySelector(
-                    ".dot"
-                );
-
-
-            let text =
-                "No Printer";
-
-
-            let isConnected =
-                false;
-
-
-            switch (state) {
-
-                case "connecting":
-
-                    text =
-                        "Connecting...";
-
-                    break;
-
-
-                case "connected":
-
-                    text =
-                        "Printer Connected";
-
-                    isConnected =
-                        true;
-
-                    break;
-
-
-                case "printing":
-
-                    text =
-                        "Printing...";
-
-                    isConnected =
-                        true;
-
-                    break;
-
-
-                case "error":
-
-                    text =
-                        "Printer Error";
-
-                    break;
-
-
-                case "disconnected":
-
-                default:
-
-                    text =
-                        "No Printer";
-
-                    break;
-
-            }
-
-
-            if (
-                status
-            ) {
-
-                status.textContent =
-                    text;
-
-            }
-
-
-            if (
-                globalStatus
-            ) {
-
-                globalStatus.textContent =
-                    text;
-
-            }
-
-
-            if (
-                dot
-            ) {
-
-                dot.classList.toggle(
-                    "connected",
-                    isConnected
-                );
-
-            }
-
-
-            /*
-            =========================================
-             CUSTOM EVENT
-            =========================================
-            */
-
-            try {
-
-                window.dispatchEvent(
-                    new CustomEvent(
-                        "smartprint-printer-status",
-                        {
-                            detail: {
-
-                                state,
-
-                                connected:
-                                    isConnected,
-
-                                type:
-                                    this.connectionType,
-
-                                name:
-                                    this.printerName
-
-                            }
-
-                        }
-                    )
-                );
-
-            }
-
-            catch (error) {}
-
-        },
-
-
-        /*
-        =================================================
-         CONNECTION ERROR
-        =================================================
-        */
-
-        handleConnectionError(error) {
-
-            if (!error) {
-
-                this.updateStatus(
-                    "error"
-                );
-
-
-                return;
-
-            }
-
-
-            /*
-            =========================================
-             USER CANCEL
-            =========================================
-            */
-
-            if (
-                error.name ===
-                "NotFoundError" ||
-
-                error.name ===
-                "AbortError"
-            ) {
-
-                console.warn(
-                    "Pemilihan printer dibatalkan pengguna."
-                );
-
-
-                this.updateStatus(
-                    "disconnected"
-                );
-
-
-                return;
-
-            }
-
-
-            /*
-            =========================================
-             SECURITY ERROR
-            =========================================
-            */
-
-            if (
-                error.name ===
-                "SecurityError"
-            ) {
-
-                console.error(
-                    "Browser menolak akses printer."
-                );
-
-
-                console.error(
-                    "Pastikan fungsi Connect dipanggil langsung dari klik user."
-                );
-
-
-                this.updateStatus(
-                    "disconnected"
-                );
-
-
-                return;
-
-            }
-
-
-            /*
-            =========================================
-             NOT SUPPORTED
-            =========================================
-            */
-
-            if (
-                error.name ===
-                "NotSupportedError"
-            ) {
-
-                console.error(
-                    "Browser / printer tidak mendukung koneksi ini."
-                );
-
-
-                this.updateStatus(
-                    "error"
-                );
-
-
-                return;
-
-            }
-
-
-            /*
-            =========================================
-             GENERIC
-            =========================================
-            */
-
-            console.error(
-                "Printer connection failed:",
-                error.message ||
-                error
-            );
-
-
-            this.updateStatus(
-                "error"
-            );
-
-        },
-
-
-        /*
-        =================================================
-         LOAD SETTINGS
-        =================================================
-        */
-
-        loadSettings() {
-
-            try {
-
-                const raw =
-                    localStorage.getItem(
-                        "SMARTPRINT_PRINTER_SETTINGS"
-                    );
-
-
-                if (!raw) {
-
-                    return;
-
-                }
-
-
-                const settings =
-                    JSON.parse(
-                        raw
-                    );
-
-
-                if (
-                    settings.printerType
-                ) {
-
-                    const type =
-                        String(
-                            settings.printerType
-                        )
-                        .toLowerCase();
-
-
-                    if (
-                        [
-                            "bluetooth",
-                            "usb",
-                            "system"
-                        ]
-                        .includes(type)
-                    ) {
-
-                        this.printerType =
-                            type;
-
-                    }
-
-                }
-
-
-                if (
-                    settings.printerName !==
-                    undefined
-                ) {
-
-                    this.printerName =
-                        String(
-                            settings.printerName ||
-                            ""
-                        );
-
-                }
-
-
-                if (
-                    settings.language
-                ) {
-
-                    this.language =
-                        String(
-                            settings.language
-                        )
-                        .toUpperCase();
-
-                }
-
-
-                if (
-                    settings.paperWidth !==
-                    undefined
-                ) {
-
-                    this.paperWidth =
-                        Number(
-                            settings.paperWidth
-                        ) ||
-                        576;
-
-                }
-
-
-                if (
-                    settings.paperHeight !==
-                    undefined
-                ) {
-
-                    this.paperHeight =
-                        Number(
-                            settings.paperHeight
-                        ) ||
-                        1200;
-
-                }
-
-
-                if (
-                    settings.dpi !==
-                    undefined
-                ) {
-
-                    this.dpi =
-                        Number(
-                            settings.dpi
-                        ) ||
-                        203;
-
-                }
-
-
-                if (
-                    settings.copies !==
-                    undefined
-                ) {
-
-                    this.copies =
-                        Math.max(
-                            1,
-                            Number(
-                                settings.copies
-                            ) ||
-                            1
-                        );
-
-                }
-
-
-                if (
-                    settings.density !==
-                    undefined
-                ) {
-
-                    this.density =
-                        Math.max(
-                            0,
-                            Number(
-                                settings.density
-                            ) ||
-                            0
-                        );
-
-                }
-
-
-                if (
-                    settings.speed !==
-                    undefined
-                ) {
-
-                    this.speed =
-                        Math.max(
-                            1,
-                            Number(
-                                settings.speed
-                            ) ||
-                            1
-                        );
-
-                }
-
-
-                if (
-                    settings.autoConnect !==
-                    undefined
-                ) {
-
-                    this.autoConnect =
-                        Boolean(
-                            settings.autoConnect
-                        );
-
-                }
-
-
-                if (
-                    settings.cutPaper !==
-                    undefined
-                ) {
-
-                    this.cutPaper =
-                        Boolean(
-                            settings.cutPaper
-                        );
-
-                }
-
-
-                if (
-                    settings.openDrawer !==
-                    undefined
-                ) {
-
-                    this.openDrawer =
-                        Boolean(
-                            settings.openDrawer
-                        );
-
-                }
-
-            }
-
-            catch (error) {
-
-                console.warn(
-                    "Printer settings gagal dibaca:",
-                    error
-                );
-
-            }
-
-        },
-
-
-        /*
-        =================================================
-         SAVE SETTINGS
-        =================================================
-        */
-
-        saveSettings() {
-
-            try {
-
-                localStorage.setItem(
-
-                    "SMARTPRINT_PRINTER_SETTINGS",
-
-                    JSON.stringify({
-
-                        printerType:
-                            this.printerType,
-
-                        printerName:
-                            this.printerName,
-
-                        language:
-                            this.language,
-
-                        paperWidth:
-                            this.paperWidth,
-
-                        paperHeight:
-                            this.paperHeight,
-
-                        dpi:
-                            this.dpi,
-
-                        copies:
-                            this.copies,
-
-                        density:
-                            this.density,
-
-                        speed:
-                            this.speed,
-
-                        autoConnect:
-                            this.autoConnect,
-
-                        cutPaper:
-                            this.cutPaper,
-
-                        openDrawer:
-                            this.openDrawer
-
-                    })
-
-                );
-
-            }
-
-            catch (error) {
-
-                console.warn(
-                    "Printer settings gagal disimpan:",
-                    error
-                );
-
-            }
-
-        },
-
-
-        /*
-        =================================================
-         GET INFO
-        =================================================
-        */
-
-        getInfo() {
-
-            let bluetoothInfo =
-                null;
-
-
-            if (
-                typeof Bluetooth !==
-                "undefined" &&
-                typeof Bluetooth.getInfo ===
-                "function"
-            ) {
-
-                try {
-
-                    bluetoothInfo =
-                        Bluetooth.getInfo();
-
-                }
-
-                catch (error) {
-
-                    bluetoothInfo =
-                        null;
-
-                }
-
-            }
-
-
-            return {
-
-                version:
-                    this.version,
-
-                type:
-                    this.printerType,
-
-                connectionType:
-                    this.connectionType,
-
-                name:
-                    this.printerName,
-
-                language:
-                    this.language,
-
-                paperWidth:
-                    this.paperWidth,
-
-                paperHeight:
-                    this.paperHeight,
-
-                dpi:
-                    this.dpi,
-
-                copies:
-                    this.copies,
-
-                density:
-                    this.density,
-
-                speed:
-                    this.speed,
-
-                connected:
-                    this.isConnected(),
-
-                connecting:
-                    this.connecting,
-
-                printing:
-                    this.printing,
-
-                autoConnect:
-                    this.autoConnect,
-
-                lastError:
-                    this.lastError
-                        ? (
-                            this.lastError.message ||
-                            String(
-                                this.lastError
-                            )
-                        )
-                        : null,
-
-                bluetooth:
-                    bluetoothInfo
-
-            };
-
-        },
-
-
-        /*
-        =================================================
-         SLEEP
-        =================================================
-        */
-
-        sleep(ms) {
-
-            return new Promise(
-                resolve =>
-                    setTimeout(
-                        resolve,
-                        ms
-                    )
-            );
-
-        }
+        qrErrorCorrection:
+            "M"
 
     };
 
 
     /*
-    =====================================================
-     GLOBAL
-    =====================================================
+    ======================================================
+     LOG
+    ======================================================
     */
 
-    window.Printer =
-        PrinterManager;
+    function log() {
 
-
-    window.PrinterManager =
-        PrinterManager;
-
-
-    /*
-    =====================================================
-     LEGACY COMPATIBILITY
-    =====================================================
-    */
-
-    window.connectPrinter =
-        function () {
-
-            return PrinterManager.connect();
-
-        };
-
-
-    window.disconnectPrinter =
-        function () {
-
-            return PrinterManager.disconnect();
-
-        };
-
-
-    /*
-    =====================================================
-     LEGACY SERIAL
-    =====================================================
-    */
-
-    window.connectSerialPrinter =
-        function () {
-
-            return PrinterManager.connectSerial();
-
-        };
-
-
-    /*
-    =====================================================
-     LEGACY BLE
-    =====================================================
-    */
-
-    window.connectBluetoothPrinter =
-        function () {
-
-            return PrinterManager.connectBluetooth();
-
-        };
-
-
-    /*
-    =====================================================
-     DOM READY
-    =====================================================
-    */
-
-    function initializePrinterManager() {
-
-        setTimeout(
-            () => {
-
-                PrinterManager.init();
-
-            },
-            700
+        console.log(
+            "[SmartPrint Printer]",
+            ...arguments
         );
 
     }
 
+
+    function warn() {
+
+        console.warn(
+            "[SmartPrint Printer]",
+            ...arguments
+        );
+
+    }
+
+
+    function error() {
+
+        console.error(
+            "[SmartPrint Printer]",
+            ...arguments
+        );
+
+    }
+
+
+    /*
+    ======================================================
+     STORAGE
+    ======================================================
+    */
+
+    function readSettings() {
+
+        let result = {};
+
+        try {
+
+            const raw =
+                localStorage.getItem(
+                    "SMARTPRINT_SETTINGS"
+                );
+
+            if (raw) {
+
+                result =
+                    JSON.parse(raw);
+
+            }
+
+        }
+
+        catch (err) {
+
+            warn(
+                "Gagal membaca SMARTPRINT_SETTINGS:",
+                err
+            );
+
+        }
+
+
+        return Object.assign(
+            {},
+            DEFAULT_SETTINGS,
+            result || {}
+        );
+
+    }
+
+
+    function saveSettings(settings) {
+
+        try {
+
+            localStorage.setItem(
+                "SMARTPRINT_SETTINGS",
+                JSON.stringify(
+                    settings
+                )
+            );
+
+            return true;
+
+        }
+
+        catch (err) {
+
+            warn(
+                "Gagal menyimpan settings:",
+                err
+            );
+
+            return false;
+
+        }
+
+    }
+
+
+    /*
+    ======================================================
+     SETTINGS
+    ======================================================
+    */
+
+    function getSettings() {
+
+        const settings =
+            readSettings();
+
+        /*
+         * Normalisasi nilai.
+         */
+
+        settings.labelWidth =
+            positiveNumber(
+                settings.labelWidth,
+                settings.paperWidth || 80
+            );
+
+        settings.labelHeight =
+            positiveNumber(
+                settings.labelHeight,
+                settings.paperHeight || 150
+            );
+
+        settings.paperWidth =
+            positiveNumber(
+                settings.paperWidth,
+                settings.labelWidth
+            );
+
+        settings.paperHeight =
+            positiveNumber(
+                settings.paperHeight,
+                settings.labelHeight
+            );
+
+        settings.dpi =
+            positiveNumber(
+                settings.dpi,
+                203
+            );
+
+        settings.gap =
+            nonNegativeNumber(
+                settings.gap,
+                0
+            );
+
+        settings.marginLeft =
+            nonNegativeNumber(
+                settings.marginLeft,
+                0
+            );
+
+        settings.marginTop =
+            nonNegativeNumber(
+                settings.marginTop,
+                0
+            );
+
+        settings.copies =
+            Math.max(
+                1,
+                Math.floor(
+                    positiveNumber(
+                        settings.copies,
+                        1
+                    )
+                )
+            );
+
+
+        return settings;
+
+    }
+
+
+    function updateSettings(
+        values
+    ) {
+
+        const current =
+            getSettings();
+
+        const next =
+            Object.assign(
+                {},
+                current,
+                values || {}
+            );
+
+        saveSettings(
+            next
+        );
+
+        return getSettings();
+
+    }
+
+
+    /*
+    ======================================================
+     NUMBER HELPERS
+    ======================================================
+    */
+
+    function positiveNumber(
+        value,
+        fallback
+    ) {
+
+        const number =
+            Number(value);
+
+        if (
+            Number.isFinite(number) &&
+            number > 0
+        ) {
+
+            return number;
+
+        }
+
+        return Number(
+            fallback
+        ) || 1;
+
+    }
+
+
+    function nonNegativeNumber(
+        value,
+        fallback
+    ) {
+
+        const number =
+            Number(value);
+
+        if (
+            Number.isFinite(number) &&
+            number >= 0
+        ) {
+
+            return number;
+
+        }
+
+        return Number(
+            fallback
+        ) || 0;
+
+    }
+
+
+    /*
+    ======================================================
+     PAPER SIZE
+    ======================================================
+    */
+
+    function getPaperSize() {
+
+        const settings =
+            getSettings();
+
+        /*
+         * Untuk label printer,
+         * labelWidth / labelHeight
+         * menjadi prioritas.
+         */
+
+        const width =
+            positiveNumber(
+                settings.labelWidth,
+                settings.paperWidth
+            );
+
+        const height =
+            positiveNumber(
+                settings.labelHeight,
+                settings.paperHeight
+            );
+
+        return {
+
+            width,
+            height,
+
+            dpi:
+                positiveNumber(
+                    settings.dpi,
+                    203
+                ),
+
+            gap:
+                nonNegativeNumber(
+                    settings.gap,
+                    0
+                ),
+
+            marginLeft:
+                nonNegativeNumber(
+                    settings.marginLeft,
+                    0
+                ),
+
+            marginTop:
+                nonNegativeNumber(
+                    settings.marginTop,
+                    0
+                )
+
+        };
+
+    }
+
+
+    /*
+    ======================================================
+     MM -> DOT
+    ======================================================
+    */
+
+    function mmToDots(
+        mm,
+        dpi
+    ) {
+
+        return Math.round(
+            Number(mm) *
+            Number(dpi) /
+            MM_PER_INCH
+        );
+
+    }
+
+
+    /*
+    ======================================================
+     DOT -> MM
+    ======================================================
+    */
+
+    function dotsToMm(
+        dots,
+        dpi
+    ) {
+
+        return (
+            Number(dots) *
+            MM_PER_INCH /
+            Number(dpi)
+        );
+
+    }
+
+
+    /*
+    ======================================================
+     PAPER DOT SIZE
+    ======================================================
+    */
+
+    function getPaperDots() {
+
+        const paper =
+            getPaperSize();
+
+        return {
+
+            width:
+                mmToDots(
+                    paper.width,
+                    paper.dpi
+                ),
+
+            height:
+                mmToDots(
+                    paper.height,
+                    paper.dpi
+                ),
+
+            dpi:
+                paper.dpi
+
+        };
+
+    }
+
+
+    /*
+    ======================================================
+     PAPER INFO
+    ======================================================
+    */
+
+    function getPaperInfo() {
+
+        const paper =
+            getPaperSize();
+
+        const dots =
+            getPaperDots();
+
+        return {
+
+            widthMm:
+                paper.width,
+
+            heightMm:
+                paper.height,
+
+            dpi:
+                paper.dpi,
+
+            widthDots:
+                dots.width,
+
+            heightDots:
+                dots.height,
+
+            gapMm:
+                paper.gap,
+
+            marginLeftMm:
+                paper.marginLeft,
+
+            marginTopMm:
+                paper.marginTop
+
+        };
+
+    }
+
+
+    /*
+    ======================================================
+     LANGUAGE
+    ======================================================
+    */
+
+    function normalizeLanguage(
+        language
+    ) {
+
+        const value =
+            String(
+                language ||
+                ""
+            )
+            .trim()
+            .toUpperCase();
+
+
+        if (
+            value === "TSPL"
+        ) {
+
+            return "TSPL";
+
+        }
+
+
+        if (
+            value === "ZPL"
+        ) {
+
+            return "ZPL";
+
+        }
+
+
+        if (
+            value === "CPCL"
+        ) {
+
+            return "CPCL";
+
+        }
+
+
+        if (
+            value === "ESC" ||
+            value === "ESC/POS" ||
+            value === "ESCPOS"
+        ) {
+
+            return "ESC";
+
+        }
+
+
+        return "ESC";
+
+    }
+
+
+    function getPrinterLanguage() {
+
+        const settings =
+            getSettings();
+
+        return normalizeLanguage(
+            settings.printLanguage
+        );
+
+    }
+
+
+    function setPrinterLanguage(
+        language
+    ) {
+
+        const normalized =
+            normalizeLanguage(
+                language
+            );
+
+        currentLanguage =
+            normalized;
+
+        updateSettings({
+
+            printLanguage:
+                normalized
+
+        });
+
+
+        log(
+            "Printer Language:",
+            normalized
+        );
+
+
+        return normalized;
+
+    }
+
+
+    /*
+    ======================================================
+     UINT8 NORMALIZATION
+    ======================================================
+    */
+
+    function normalizeBytes(
+        data
+    ) {
+
+        if (
+            data instanceof Uint8Array
+        ) {
+
+            return data;
+
+        }
+
+
+        if (
+            data instanceof ArrayBuffer
+        ) {
+
+            return new Uint8Array(
+                data
+            );
+
+        }
+
+
+        if (
+            ArrayBuffer.isView(data)
+        ) {
+
+            return new Uint8Array(
+                data.buffer,
+                data.byteOffset,
+                data.byteLength
+            );
+
+        }
+
+
+        if (
+            Array.isArray(data)
+        ) {
+
+            return new Uint8Array(
+                data
+            );
+
+        }
+
+
+        throw new TypeError(
+            "Printer: data harus Uint8Array, ArrayBuffer, TypedArray, atau Array."
+        );
+
+    }
+
+
+    /*
+    ======================================================
+     CONCAT BYTES
+    ======================================================
+    */
+
+    function concatBytes() {
+
+        const arrays =
+            Array.prototype
+                .slice
+                .call(
+                    arguments
+                )
+                .map(
+                    normalizeBytes
+                );
+
+
+        let total =
+            0;
+
+
+        arrays.forEach(
+            item => {
+
+                total +=
+                    item.length;
+
+            }
+        );
+
+
+        const result =
+            new Uint8Array(
+                total
+            );
+
+
+        let offset =
+            0;
+
+
+        arrays.forEach(
+            item => {
+
+                result.set(
+                    item,
+                    offset
+                );
+
+                offset +=
+                    item.length;
+
+            }
+        );
+
+
+        return result;
+
+    }
+
+
+    /*
+    ======================================================
+     TEXT ENCODING
+    ======================================================
+    */
+
+    function textBytes(
+        text
+    ) {
+
+        const value =
+            String(
+                text === undefined ||
+                text === null
+                    ? ""
+                    : text
+            );
+
+
+        /*
+         * Printer thermal biasanya
+         * menggunakan UTF-8 hanya pada
+         * printer yang mendukungnya.
+
+         * Untuk command ASCII,
+         * gunakan TextEncoder.
+         */
+
+        if (
+            typeof TextEncoder !==
+            "undefined"
+        ) {
+
+            return new TextEncoder()
+                .encode(
+                    value
+                );
+
+        }
+
+
+        const bytes =
+            new Uint8Array(
+                value.length
+            );
+
+
+        for (
+            let i = 0;
+            i < value.length;
+            i++
+        ) {
+
+            bytes[i] =
+                value.charCodeAt(i) &
+                0xff;
+
+        }
+
+
+        return bytes;
+
+    }
+
+
+    function ascii(
+        text
+    ) {
+
+        return textBytes(
+            text
+        );
+
+    }
+
+
+    /*
+    ======================================================
+     STRING REPEAT
+    ======================================================
+    */
+
+    function repeat(
+        character,
+        count
+    ) {
+
+        return new Array(
+            Math.max(
+                0,
+                Number(count) || 0
+            ) + 1
+        )
+        .join(
+            character
+        );
+
+    }
+
+
+    /*
+    ======================================================
+     CLAMP
+    ======================================================
+    */
+
+    function clamp(
+        value,
+        min,
+        max
+    ) {
+
+        return Math.min(
+            max,
+            Math.max(
+                min,
+                value
+            )
+        );
+
+    }
+
+
+    /*
+    ======================================================
+     COLOR
+    ======================================================
+    */
+
+    function normalizeColor(
+        color
+    ) {
+
+        if (
+            !color
+        ) {
+
+            return "#000000";
+
+        }
+
+
+        const value =
+            String(
+                color
+            )
+            .trim()
+            .toUpperCase();
+
+
+        if (
+            value ===
+            "BLACK"
+        ) {
+
+            return "#000000";
+
+        }
+
+
+        if (
+            value ===
+            "WHITE"
+        ) {
+
+            return "#FFFFFF";
+
+        }
+
+
+        if (
+            /^#[0-9A-F]{6}$/
+            .test(
+                value
+            )
+        ) {
+
+            return value;
+
+        }
+
+
+        if (
+            /^#[0-9A-F]{3}$/
+            .test(
+                value
+            )
+        ) {
+
+            return "#" +
+                value[1] +
+                value[1] +
+                value[2] +
+                value[2] +
+                value[3] +
+                value[3];
+
+        }
+
+
+        return "#000000";
+
+    }
+
+
+    function isBlack(
+        color
+    ) {
+
+        return (
+            normalizeColor(
+                color
+            ) ===
+            "#000000"
+        );
+
+    }
+
+
+    /*
+    ======================================================
+     TRANSPARENT BACKGROUND
+    ======================================================
+    */
+
+    function isTransparentBackground(
+        object
+    ) {
+
+        if (
+            !object
+        ) {
+
+            return true;
+
+        }
+
+
+        const background =
+            object.background ||
+            object.fill ||
+            object.color;
+
+
+        if (
+            !background
+        ) {
+
+            return true;
+
+        }
+
+
+        const value =
+            String(
+                background
+            )
+            .trim()
+            .toLowerCase();
+
+
+        return (
+            value === "transparent" ||
+            value === "none" ||
+            value === "null"
+        );
+
+    }
+
+
+    /*
+    ======================================================
+     OBJECT BLACK CHECK
+    ======================================================
+    */
+
+    function shouldPrintObject(
+        object
+    ) {
+
+        if (
+            !object
+        ) {
+
+            return false;
+
+        }
+
+
+        if (
+            object.visible === false
+        ) {
+
+            return false;
+
+        }
+
+
+        /*
+         * Locked object tetap dicetak.
+         */
+
+        /*
+         * Background putih tidak dicetak.
+         */
+
+        if (
+            object.isBackground === true
+        ) {
+
+            return false;
+
+        }
+
+
+        if (
+            object.type ===
+            "background"
+        ) {
+
+            return false;
+
+        }
+
+
+        return true;
+
+    }
+
+
+    /*
+    ======================================================
+     OBJECT POSITION
+    ======================================================
+    */
+
+    function objectNumber(
+        object,
+        key,
+        fallback
+    ) {
+
+        if (
+            !object
+        ) {
+
+            return fallback;
+
+        }
+
+
+        const value =
+            Number(
+                object[key]
+            );
+
+
+        return Number.isFinite(
+            value
+        )
+            ? value
+            : fallback;
+
+    }
+
+
+    function getObjectX(
+        object
+    ) {
+
+        return objectNumber(
+            object,
+            "x",
+            0
+        );
+
+    }
+
+
+    function getObjectY(
+        object
+    ) {
+
+        return objectNumber(
+            object,
+            "y",
+            0
+        );
+
+    }
+
+
+    function getObjectWidth(
+        object
+    ) {
+
+        return objectNumber(
+            object,
+            "width",
+            0
+        );
+
+    }
+
+
+    function getObjectHeight(
+        object
+    ) {
+
+        return objectNumber(
+            object,
+            "height",
+            0
+        );
+
+    }
+
+
+    function getObjectRotation(
+        object
+    ) {
+
+        return objectNumber(
+            object,
+            "rotation",
+            0
+        );
+
+    }
+
+
+    /*
+    ======================================================
+     GET OBJECT TYPE
+    ======================================================
+    */
+
+    function getObjectType(
+        object
+    ) {
+
+        if (
+            !object
+        ) {
+
+            return "";
+
+        }
+
+
+        return String(
+            object.type ||
+            object.objectType ||
+            object.kind ||
+            ""
+        )
+        .trim()
+        .toLowerCase();
+
+    }
+
+
+    /*
+    ======================================================
+     OBJECT TEXT
+    ======================================================
+    */
+
+    function getObjectText(
+        object
+    ) {
+
+        if (
+            !object
+        ) {
+
+            return "";
+
+        }
+
+
+        return String(
+            object.text !== undefined
+                ? object.text
+                : object.value !== undefined
+                    ? object.value
+                    : object.content !== undefined
+                        ? object.content
+                        : ""
+        );
+
+    }
+
+
+    /*
+    ======================================================
+     OBJECT DATA
+    ======================================================
+    */
+
+    function getObjectData(
+        object
+    ) {
+
+        if (
+            !object
+        ) {
+
+            return null;
+
+        }
+
+
+        return (
+            object.data ||
+            object.src ||
+            object.imageData ||
+            object.url ||
+            null
+        );
+
+    }
+
+
+    /*
+    ======================================================
+     SCALE
+    ======================================================
+    */
+
+    function getScale(
+        object
+    ) {
+
+        if (
+            !object
+        ) {
+
+            return 1;
+
+        }
+
+
+        const scale =
+            Number(
+                object.scale
+            );
+
+
+        return (
+            Number.isFinite(
+                scale
+            ) &&
+            scale > 0
+        )
+            ? scale
+            : 1;
+
+    }
+
+
+    /*
+    ======================================================
+     OBJECT TO DOT RECT
+    ======================================================
+    */
+
+    function objectToDots(
+        object
+    ) {
+
+        const paper =
+            getPaperSize();
+
+
+        const x =
+            mmToDots(
+                getObjectX(object),
+                paper.dpi
+            );
+
+
+        const y =
+            mmToDots(
+                getObjectY(object),
+                paper.dpi
+            );
+
+
+        const width =
+            mmToDots(
+                getObjectWidth(object),
+                paper.dpi
+            );
+
+
+        const height =
+            mmToDots(
+                getObjectHeight(object),
+                paper.dpi
+            );
+
+
+        return {
+
+            x,
+            y,
+            width,
+            height,
+
+            rotation:
+                getObjectRotation(
+                    object
+                )
+
+        };
+
+    }
+
+
+    /*
+    ======================================================
+     PRINTER CONNECTION
+    ======================================================
+    */
+
+    function getBluetooth() {
+
+        if (
+            typeof window ===
+            "undefined"
+        ) {
+
+            return null;
+
+        }
+
+
+        if (
+            window.Bluetooth
+        ) {
+
+            return window.Bluetooth;
+
+        }
+
+
+        if (
+            window.SmartPrintBluetooth
+        ) {
+
+            return window.SmartPrintBluetooth;
+
+        }
+
+
+        if (
+            window.BluetoothEngine
+        ) {
+
+            return window.BluetoothEngine;
+
+        }
+
+
+        return null;
+
+    }
+
+
+    /*
+    ======================================================
+     CHECK BLUETOOTH
+    ======================================================
+    */
+
+    function hasBluetooth() {
+
+        return Boolean(
+            getBluetooth()
+        );
+
+    }
+
+
+    /*
+    ======================================================
+     CONNECT
+    ======================================================
+    */
+
+    async function connect() {
+
+        const bluetooth =
+            getBluetooth();
+
+
+        if (
+            !bluetooth
+        ) {
+
+            throw new Error(
+                "SmartPrint Bluetooth Engine tidak ditemukan."
+            );
+
+        }
+
+
+        log(
+            "Connecting printer..."
+        );
+
+
+        let result =
+            false;
+
+
+        /*
+         * User connection.
+         * Ini boleh membuka picker.
+         */
+
+        if (
+            typeof bluetooth.connectUser ===
+            "function"
+        ) {
+
+            result =
+                await bluetooth.connectUser();
+
+        }
+
+        else if (
+            typeof bluetooth.connectBLE ===
+            "function"
+        ) {
+
+            result =
+                await bluetooth.connectBLE();
+
+        }
+
+        else if (
+            typeof bluetooth.connect ===
+            "function"
+        ) {
+
+            result =
+                await bluetooth.connect();
+
+        }
+
+
+        connected =
+            Boolean(
+                result
+            );
+
+
+        if (
+            connected
+        ) {
+
+            try {
+
+                currentPrinter =
+                    typeof bluetooth.getInfo ===
+                    "function"
+                        ? bluetooth.getInfo()
+                        : null;
+
+            }
+
+            catch (e) {
+
+                currentPrinter =
+                    null;
+
+            }
+
+
+            dispatch(
+                "connected",
+                {
+                    printer:
+                        currentPrinter
+                }
+            );
+
+        }
+
+
+        return connected;
+
+    }
+
+
+    /*
+    ======================================================
+     CONNECT NEW
+    ======================================================
+    */
+
+    async function connectNew() {
+
+        const bluetooth =
+            getBluetooth();
+
+
+        if (
+            !bluetooth
+        ) {
+
+            throw new Error(
+                "SmartPrint Bluetooth Engine tidak ditemukan."
+            );
+
+        }
+
+
+        if (
+            typeof bluetooth.connectBLENew ===
+            "function"
+        ) {
+
+            const result =
+                await bluetooth.connectBLENew();
+
+
+            connected =
+                Boolean(
+                    result
+                );
+
+
+            return connected;
+
+        }
+
+
+        return connect();
+
+    }
+
+
+    /*
+    ======================================================
+     AUTO CONNECT
+    ======================================================
+    */
+
+    async function autoConnect() {
+
+        const bluetooth =
+            getBluetooth();
+
+
+        if (
+            !bluetooth
+        ) {
+
+            warn(
+                "Bluetooth Engine belum tersedia."
+            );
+
+
+            return false;
+
+        }
+
+
+        if (
+            typeof bluetooth.autoConnect !==
+            "function"
+        ) {
+
+            return false;
+
+        }
+
+
+        try {
+
+            const result =
+                await bluetooth.autoConnect();
+
+
+            connected =
+                Boolean(
+                    result
+                );
+
+
+            return connected;
+
+        }
+
+        catch (err) {
+
+            warn(
+                "Auto connect gagal:",
+                err
+            );
+
+
+            return false;
+
+        }
+
+    }
+
+
+    /*
+    ======================================================
+     DISCONNECT
+    ======================================================
+    */
+
+    async function disconnect() {
+
+        const bluetooth =
+            getBluetooth();
+
+
+        if (
+            bluetooth &&
+            typeof bluetooth.disconnect ===
+            "function"
+        ) {
+
+            try {
+
+                await bluetooth.disconnect();
+
+            }
+
+            catch (err) {
+
+                warn(
+                    "Disconnect error:",
+                    err
+                );
+
+            }
+
+        }
+
+
+        connected =
+            false;
+
+
+        currentPrinter =
+            null;
+
+
+        dispatch(
+            "disconnected"
+        );
+
+
+        return true;
+
+    }
+
+
+    /*
+    ======================================================
+     CONNECTION STATUS
+    ======================================================
+    */
+
+    function isConnected() {
+
+        const bluetooth =
+            getBluetooth();
+
+
+        if (
+            bluetooth &&
+            typeof bluetooth.isConnected ===
+            "function"
+        ) {
+
+            try {
+
+                return Boolean(
+                    bluetooth.isConnected()
+                );
+
+            }
+
+            catch (e) {}
+
+        }
+
+
+        return connected;
+
+    }
+
+
+    /*
+    ======================================================
+     PRINTER INFO
+    ======================================================
+    */
+
+    function getPrinterInfo() {
+
+        const bluetooth =
+            getBluetooth();
+
+
+        let info =
+            null;
+
+
+        if (
+            bluetooth &&
+            typeof bluetooth.getInfo ===
+            "function"
+        ) {
+
+            try {
+
+                info =
+                    bluetooth.getInfo();
+
+            }
+
+            catch (e) {}
+
+        }
+
+
+        return {
+
+            connected:
+                isConnected(),
+
+            language:
+                getPrinterLanguage(),
+
+            paper:
+                getPaperInfo(),
+
+            bluetooth:
+                info
+
+        };
+
+    }
+
+
+    /*
+    ======================================================
+     SEND RAW
+    ======================================================
+    */
+
+    async function sendRaw(
+        data
+    ) {
+
+        const bytes =
+            normalizeBytes(
+                data
+            );
+
+
+        if (
+            bytes.length === 0
+        ) {
+
+            warn(
+                "sendRaw(): data kosong."
+            );
+
+
+            return false;
+
+        }
+
+
+        const bluetooth =
+            getBluetooth();
+
+
+        if (
+            !bluetooth
+        ) {
+
+            throw new Error(
+                "SmartPrint Bluetooth Engine tidak ditemukan."
+            );
+
+        }
+
+
+        if (
+            typeof bluetooth.sendRaw !==
+            "function"
+        ) {
+
+            throw new Error(
+                "Bluetooth.sendRaw() tidak tersedia."
+            );
+
+        }
+
+
+        /*
+         * Jangan otomatis connect di sini.
+         *
+         * sendRaw harus bekerja pada koneksi
+         * yang sudah dibuat oleh user / app.
+         */
+
+        if (
+            typeof bluetooth.isConnected ===
+            "function" &&
+            !bluetooth.isConnected()
+        ) {
+
+            throw new Error(
+                "Printer belum terhubung."
+            );
+
+        }
+
+
+        return await bluetooth.sendRaw(
+            bytes
+        );
+
+    }
+
+
+    /*
+    ======================================================
+     EVENT
+    ======================================================
+    */
+
+    function dispatch(
+        name,
+        detail
+    ) {
+
+        try {
+
+            window.dispatchEvent(
+                new CustomEvent(
+                    "smartprint-printer-" +
+                    name,
+                    {
+                        detail:
+                            detail || {}
+                    }
+                )
+            );
+
+        }
+
+        catch (e) {}
+
+    }
+
+
+    /*
+    ======================================================
+     BLUETOOTH EVENTS
+    ======================================================
+    */
+
+    function attachBluetoothEvents() {
+
+        if (
+            typeof window ===
+            "undefined"
+        ) {
+
+            return;
+
+        }
+
+
+        window.addEventListener(
+            "smartprint-bluetooth-connected",
+            event => {
+
+                connected =
+                    true;
+
+
+                currentPrinter =
+                    event.detail ||
+                    null;
+
+
+                dispatch(
+                    "connected",
+                    event.detail
+                );
+
+            }
+        );
+
+
+        window.addEventListener(
+            "smartprint-bluetooth-disconnected",
+            event => {
+
+                connected =
+                    false;
+
+
+                currentPrinter =
+                    null;
+
+
+                dispatch(
+                    "disconnected",
+                    event.detail
+                );
+
+            }
+        );
+
+
+        window.addEventListener(
+            "smartprint-bluetooth-connecting",
+            event => {
+
+                dispatch(
+                    "connecting",
+                    event.detail
+                );
+
+            }
+        );
+
+
+        window.addEventListener(
+            "smartprint-bluetooth-data",
+            event => {
+
+                dispatch(
+                    "data",
+                    event.detail
+                );
+
+            }
+        );
+
+
+        window.addEventListener(
+            "smartprint-bluetooth-status",
+            event => {
+
+                if (
+                    event.detail &&
+                    "connected" in
+                    event.detail
+                ) {
+
+                    connected =
+                        Boolean(
+                            event.detail.connected
+                        );
+
+                }
+
+
+                dispatch(
+                    "status",
+                    event.detail
+                );
+
+            }
+        );
+
+    }
+
+
+    /*
+    ======================================================
+     INITIALIZE
+    ======================================================
+    */
+
+    async function init() {
+
+        if (
+            initialized
+        ) {
+
+            return true;
+
+        }
+
+
+        log(
+            "========================================"
+        );
+
+
+        log(
+            "SmartPrint Printer Manager v" +
+            VERSION
+        );
+
+
+        log(
+            "========================================"
+        );
+
+
+        const settings =
+            getSettings();
+
+
+        currentLanguage =
+            normalizeLanguage(
+                settings.printLanguage
+            );
+
+
+        log(
+            "Printer Language:",
+            currentLanguage
+        );
+
+
+        log(
+            "Paper:",
+            settings.labelWidth,
+            "x",
+            settings.labelHeight,
+            "mm"
+        );
+
+
+        log(
+            "DPI:",
+            settings.dpi
+        );
+
+
+        log(
+            "Transparent background:"
+        );
+
+
+        log(
+            "YES - background tidak dikirim"
+        );
+
+
+        attachBluetoothEvents();
+
+
+        initialized =
+            true;
+
+
+        /*
+         * Auto connect tidak membuka picker.
+         */
+
+        setTimeout(
+            () => {
+
+                autoConnect()
+                    .catch(
+                        err =>
+                            warn(
+                                "AutoConnect:",
+                                err
+                            )
+                    );
+
+            },
+            100
+        );
+
+
+        log(
+            "Printer Manager initialized."
+        );
+
+
+        return true;
+
+    }
+
+
+    /*
+    ======================================================
+     PUBLIC BASIC API
+    ======================================================
+    */
+
+    const Printer = {
+
+        version:
+            VERSION,
+
+        init,
+
+        connect,
+
+        connectNew,
+
+        autoConnect,
+
+        disconnect,
+
+        isConnected,
+
+        sendRaw,
+
+        getSettings,
+
+        updateSettings,
+
+        getPaperSize,
+
+        getPaperDots,
+
+        getPaperInfo,
+
+        getPrinterLanguage,
+
+        setPrinterLanguage,
+
+        getPrinterInfo,
+
+        mmToDots,
+
+        dotsToMm,
+
+        objectToDots
+
+    };
+
+
+    /*
+    ======================================================
+     GLOBAL
+    ======================================================
+    */
+
+    window.Printer =
+        Printer;
+
+
+    window.SmartPrintPrinter =
+        Printer;
+
+
+    window.PrinterManager =
+        Printer;
+
+
+    /*
+    ======================================================
+     READY LOG
+    ======================================================
+    */
+
+    console.log(
+        "========================================"
+    );
+
+
+    console.log(
+        "SmartPrint Printer Manager v" +
+        VERSION +
+        " Ready"
+    );
+
+
+    console.log(
+        "========================================"
+    );
+
+
+    /*
+    ======================================================
+     DOM READY
+    ======================================================
+    */
 
     if (
         document.readyState ===
@@ -3229,9 +2391,21 @@
 
         document.addEventListener(
             "DOMContentLoaded",
-            initializePrinterManager,
+            () => {
+
+                setTimeout(
+                    () => {
+
+                        Printer.init();
+
+                    },
+                    150
+                );
+
+            },
             {
-                once: true
+                once:
+                    true
             }
         );
 
@@ -3239,29 +2413,16 @@
 
     else {
 
-        initializePrinterManager();
+        setTimeout(
+            () => {
+
+                Printer.init();
+
+            },
+            150
+        );
 
     }
 
-
-    /*
-    =====================================================
-     READY
-    =====================================================
-    */
-
-    console.log(
-        "========================================"
-    );
-
-    console.log(
-        "SmartPrint Printer Manager v" +
-        VERSION +
-        " Ready"
-    );
-
-    console.log(
-        "========================================"
-    );
 
 })();
