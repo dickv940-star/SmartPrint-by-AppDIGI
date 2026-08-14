@@ -2703,7 +2703,458 @@
 
     }
 
+/*
+=====================================================
+ SMARTPRINT 4B-2084A DIAGNOSTIC
+=====================================================
+*/
 
+async function diagnosePrinter() {
+
+    console.log("");
+    console.log("========================================");
+    console.log(" SMARTPRINT 4B-2084A DIAGNOSTIC");
+    console.log("========================================");
+
+    if (!isBluetoothSupported()) {
+
+        console.error(
+            "[Diagnostic] Web Bluetooth tidak tersedia."
+        );
+
+        return {
+            supported: false
+        };
+
+    }
+
+    let selected = null;
+
+    try {
+
+        console.log(
+            "[Diagnostic] Membuka Bluetooth picker..."
+        );
+
+        selected =
+            await navigator.bluetooth.requestDevice({
+
+                acceptAllDevices: true,
+
+                optionalServices:
+                    CONFIG.optionalServices
+
+            });
+
+    }
+
+    catch (err) {
+
+        console.error(
+            "[Diagnostic] Bluetooth picker error:",
+            err
+        );
+
+        return {
+            supported: true,
+            selected: false,
+            error: err
+        };
+
+    }
+
+    if (!selected) {
+
+        console.warn(
+            "[Diagnostic] Tidak ada device dipilih."
+        );
+
+        return {
+            supported: true,
+            selected: false
+        };
+
+    }
+
+    console.log("");
+    console.log("========================================");
+    console.log(" DEVICE TERPILIH");
+    console.log("========================================");
+
+    console.log(
+        "Name:",
+        selected.name || "(unknown)"
+    );
+
+    console.log(
+        "ID:",
+        selected.id || "(unknown)"
+    );
+
+    console.log(
+        "GATT:",
+        Boolean(selected.gatt)
+    );
+
+    /*
+    ================================================
+     CONNECT
+    ================================================
+    */
+
+    try {
+
+        if (
+            !selected.gatt
+        ) {
+
+            throw new Error(
+                "Device tidak memiliki GATT."
+            );
+
+        }
+
+        console.log(
+            "[Diagnostic] GATT connecting..."
+        );
+
+        const diagnosticServer =
+            await selected.gatt.connect();
+
+        console.log(
+            "[Diagnostic] GATT CONNECTED"
+        );
+
+        /*
+        ============================================
+         SERVICES
+        ============================================
+        */
+
+        const services =
+            await diagnosticServer.getPrimaryServices();
+
+        console.log("");
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            " PRIMARY SERVICES:",
+            services.length
+        );
+
+        console.log(
+            "========================================"
+        );
+
+        const serviceResults = [];
+
+        /*
+        ============================================
+         SCAN SERVICES
+        ============================================
+        */
+
+        for (
+            const service of services
+        ) {
+
+            console.log("");
+            console.log(
+                "SERVICE:",
+                service.uuid
+            );
+
+            let characteristics = [];
+
+            try {
+
+                characteristics =
+                    await service.getCharacteristics();
+
+            }
+
+            catch (err) {
+
+                console.warn(
+                    "Gagal membaca characteristic:",
+                    err
+                );
+
+                continue;
+
+            }
+
+            const characteristicResults = [];
+
+            for (
+                const characteristic
+                of characteristics
+            ) {
+
+                const properties =
+                    characteristic.properties ||
+                    {};
+
+                const result = {
+
+                    uuid:
+                        characteristic.uuid,
+
+                    write:
+                        Boolean(
+                            properties.write
+                        ),
+
+                    writeWithoutResponse:
+                        Boolean(
+                            properties.writeWithoutResponse
+                        ),
+
+                    notify:
+                        Boolean(
+                            properties.notify
+                        ),
+
+                    indicate:
+                        Boolean(
+                            properties.indicate
+                        ),
+
+                    read:
+                        Boolean(
+                            properties.read
+                        )
+
+                };
+
+                characteristicResults.push(
+                    result
+                );
+
+                console.log(
+                    "  CHARACTERISTIC:",
+                    characteristic.uuid
+                );
+
+                console.log(
+                    "    read:",
+                    result.read
+                );
+
+                console.log(
+                    "    write:",
+                    result.write
+                );
+
+                console.log(
+                    "    writeWithoutResponse:",
+                    result.writeWithoutResponse
+                );
+
+                console.log(
+                    "    notify:",
+                    result.notify
+                );
+
+                console.log(
+                    "    indicate:",
+                    result.indicate
+                );
+
+            }
+
+            serviceResults.push({
+
+                uuid:
+                    service.uuid,
+
+                characteristics:
+                    characteristicResults
+
+            });
+
+        }
+
+        /*
+        ============================================
+         FIND WRITE
+        ============================================
+        */
+
+        let writeFound = null;
+
+        let notifyFound = null;
+
+        for (
+            const service
+            of serviceResults
+        ) {
+
+            for (
+                const characteristic
+                of service.characteristics
+            ) {
+
+                if (
+                    !writeFound &&
+                    (
+                        characteristic.write ||
+                        characteristic.writeWithoutResponse
+                    )
+                ) {
+
+                    writeFound = {
+                        service:
+                            service.uuid,
+
+                        characteristic:
+                            characteristic.uuid,
+
+                        write:
+                            characteristic.write,
+
+                        writeWithoutResponse:
+                            characteristic.writeWithoutResponse
+                    };
+
+                }
+
+                if (
+                    !notifyFound &&
+                    (
+                        characteristic.notify ||
+                        characteristic.indicate
+                    )
+                ) {
+
+                    notifyFound = {
+                        service:
+                            service.uuid,
+
+                        characteristic:
+                            characteristic.uuid,
+
+                        notify:
+                            characteristic.notify,
+
+                        indicate:
+                            characteristic.indicate
+                    };
+
+                }
+
+            }
+
+        }
+
+        console.log("");
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            " DIAGNOSTIC RESULT"
+        );
+
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            "Printer:",
+            selected.name || "(unknown)"
+        );
+
+        console.log(
+            "GATT:",
+            true
+        );
+
+        console.log(
+            "Services:",
+            services.length
+        );
+
+        console.log(
+            "WRITE:",
+            writeFound || "NOT FOUND"
+        );
+
+        console.log(
+            "NOTIFY:",
+            notifyFound || "NOT FOUND"
+        );
+
+        console.log(
+            "========================================"
+        );
+
+        return {
+
+            supported:
+                true,
+
+            selected:
+                true,
+
+            name:
+                selected.name || "",
+
+            id:
+                selected.id || "",
+
+            gatt:
+                true,
+
+            services:
+                serviceResults,
+
+            write:
+                writeFound,
+
+            notify:
+                notifyFound
+
+        };
+
+    }
+
+    catch (err) {
+
+        console.error(
+            "[Diagnostic] GATT/service error:",
+            err
+        );
+
+        return {
+
+            supported:
+                true,
+
+            selected:
+                true,
+
+            name:
+                selected.name || "",
+
+            id:
+                selected.id || "",
+
+            gatt:
+                Boolean(
+                    selected.gatt
+                ),
+
+            error:
+                err
+
+        };
+
+    }
+
+}
     /*
     =====================================================
      PUBLIC API
