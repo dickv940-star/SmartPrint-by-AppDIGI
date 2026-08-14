@@ -2,27 +2,37 @@
 
 /*
 =====================================================
- SmartPrint Settings Manager v4.2
+ SmartPrint Settings Manager v4.2.0
 =====================================================
 
- RESPONSIBILITY
+ PURPOSE
  ----------------------------------------------------
- - Menyimpan konfigurasi aplikasi
- - Printer language
- - Paper / label size
- - DPI
- - Preview settings
- - Barcode settings
- - Printer settings
- - Sinkronisasi dengan Printer Manager
+ Central settings manager untuk SmartPrint.
 
- IMPORTANT
+ COMPATIBILITY
  ----------------------------------------------------
- Settings TIDAK mengirim data printer.
+ app.js
+ printer.js
+ preview.js
+ barcode.js
+ bluetooth.js
+ tspl.js
+ escpos.js
+ zpl.js
+ cpcl.js
 
- Settings hanya menyimpan konfigurasi.
+ IMPORTANT API
+ ----------------------------------------------------
+ Settings.get()
+ Settings.set()
+ Settings.getAll()
+ Settings.sync()
+ Settings.reset()
+ Settings.save()
+ Settings.load()
 
- Printer Manager menangani koneksi dan printing.
+ Printer membaca Settings secara langsung.
+
 =====================================================
 */
 
@@ -40,6 +50,12 @@
     */
 
     const DEFAULTS = {
+
+        /*
+        ---------------------------------------------
+         APPLICATION
+        ---------------------------------------------
+        */
 
         appName:
             "SmartPrint by AppDIGI",
@@ -61,9 +77,9 @@
 
 
         /*
-        =============================================
+        ---------------------------------------------
          PRINTER
-        =============================================
+        ---------------------------------------------
         */
 
         printerName:
@@ -107,9 +123,9 @@
 
 
         /*
-        =============================================
+        ---------------------------------------------
          LABEL
-        =============================================
+        ---------------------------------------------
         */
 
         labelWidth:
@@ -132,38 +148,54 @@
 
 
         /*
-        =============================================
+        ---------------------------------------------
          PREVIEW
-        =============================================
+        ---------------------------------------------
         */
 
-        preview: {
+        zoom:
+            1,
 
-            zoom:
-                1,
+        fitScreen:
+            true,
 
-            fitScreen:
-                true,
+        showGrid:
+            false,
 
-            showGrid:
-                false,
+        showRuler:
+            true,
 
-            showRuler:
-                true,
-
-            snapToGrid:
-                true,
-
-            transparentBackground:
-                true
-
-        },
+        snapToGrid:
+            true,
 
 
         /*
-        =============================================
+        ---------------------------------------------
+         BACKGROUND
+        ---------------------------------------------
+        */
+
+        transparentBackground:
+            true,
+
+
+        /*
+        ---------------------------------------------
+         COLOR
+        ---------------------------------------------
+        */
+
+        foreground:
+            "#000000",
+
+        background:
+            "transparent",
+
+
+        /*
+        ---------------------------------------------
          BARCODE
-        =============================================
+        ---------------------------------------------
         */
 
         barcodeType:
@@ -175,34 +207,44 @@
         barcodeHeight:
             60,
 
-        barcodeText:
+        barcodeDisplayValue:
             true,
+
+        barcodeFontSize:
+            14,
 
 
         /*
-        =============================================
+        ---------------------------------------------
          QR
-        =============================================
+        ---------------------------------------------
         */
 
         qrSize:
-            200,
+            150,
 
         qrErrorCorrection:
             "M",
 
 
         /*
-        =============================================
-         DESIGN
-        =============================================
+        ---------------------------------------------
+         CONNECTION
+        ---------------------------------------------
         */
 
-        background:
-            "transparent",
+        connectionType:
+            "BLE",
 
-        inkColor:
-            "#000000"
+
+        /*
+        ---------------------------------------------
+         BRIDGE
+        ---------------------------------------------
+        */
+
+        bridgeURL:
+            "http://127.0.0.1:18181"
 
     };
 
@@ -219,18 +261,24 @@
 
     /*
     =================================================
-     UTILITY
+     CLONE
     =================================================
     */
 
-    function clone(value) {
+    function clone(object) {
 
         return JSON.parse(
-            JSON.stringify(value)
+            JSON.stringify(object)
         );
 
     }
 
+
+    /*
+    =================================================
+     LOG
+    =================================================
+    */
 
     function log(...args) {
 
@@ -254,101 +302,11 @@
 
     /*
     =================================================
-     NORMALIZE LANGUAGE
-    =================================================
-    */
-
-    function normalizeLanguage(language) {
-
-        const value =
-            String(
-                language ||
-                "ESC"
-            )
-            .trim()
-            .toUpperCase();
-
-
-        const allowed = [
-
-            "ESC",
-            "ESCPOS",
-            "TSPL",
-            "ZPL",
-            "CPCL"
-
-        ];
-
-
-        if (
-            allowed.includes(value)
-        ) {
-
-            if (
-                value === "ESCPOS"
-            ) {
-
-                return "ESC";
-
-            }
-
-            return value;
-
-        }
-
-
-        warn(
-            "Printer language tidak dikenal:",
-            language,
-            "→ ESC"
-        );
-
-
-        return "ESC";
-
-    }
-
-
-    /*
-    =================================================
-     NUMBER
-    =================================================
-    */
-
-    function number(
-        value,
-        fallback
-    ) {
-
-        const n =
-            Number(value);
-
-
-        if (
-            Number.isFinite(n)
-        ) {
-
-            return n;
-
-        }
-
-
-        return fallback;
-
-    }
-
-
-    /*
-    =================================================
      LOAD
     =================================================
     */
 
     function load() {
-
-        let saved =
-            null;
-
 
         try {
 
@@ -358,39 +316,42 @@
                 );
 
 
-            if (raw) {
+            if (!raw) {
 
-                saved =
-                    JSON.parse(raw);
+                data =
+                    clone(DEFAULTS);
+
+                return data;
+
+            }
+
+
+            const saved =
+                JSON.parse(raw);
+
+
+            if (
+                saved &&
+                typeof saved === "object"
+            ) {
+
+                data =
+                    Object.assign(
+                        clone(DEFAULTS),
+                        saved
+                    );
 
             }
 
         }
 
-        catch (err) {
+        catch (error) {
 
             warn(
-                "Gagal membaca settings:",
-                err
+                "Gagal load settings:",
+                error
             );
 
-        }
-
-
-        if (
-            saved &&
-            typeof saved === "object"
-        ) {
-
-            data =
-                merge(
-                    clone(DEFAULTS),
-                    saved
-                );
-
-        }
-
-        else {
 
             data =
                 clone(DEFAULTS);
@@ -398,213 +359,7 @@
         }
 
 
-        normalize();
-
-
-        return getAll();
-
-    }
-
-
-    /*
-    =================================================
-     MERGE
-    =================================================
-    */
-
-    function merge(
-        target,
-        source
-    ) {
-
-        Object.keys(source).forEach(
-            key => {
-
-                if (
-                    source[key] &&
-                    typeof source[key] === "object" &&
-                    !Array.isArray(source[key]) &&
-
-                    target[key] &&
-                    typeof target[key] === "object" &&
-                    !Array.isArray(target[key])
-                ) {
-
-                    target[key] =
-                        merge(
-                            target[key],
-                            source[key]
-                        );
-
-                }
-
-                else {
-
-                    target[key] =
-                        source[key];
-
-                }
-
-            }
-        );
-
-
-        return target;
-
-    }
-
-
-    /*
-    =================================================
-     NORMALIZE
-    =================================================
-    */
-
-    function normalize() {
-
-        data.printLanguage =
-            normalizeLanguage(
-                data.printLanguage
-            );
-
-
-        data.paperWidth =
-            number(
-                data.paperWidth,
-                100
-            );
-
-
-        data.paperHeight =
-            number(
-                data.paperHeight,
-                150
-            );
-
-
-        data.labelWidth =
-            number(
-                data.labelWidth,
-                data.paperWidth
-            );
-
-
-        data.labelHeight =
-            number(
-                data.labelHeight,
-                data.paperHeight
-            );
-
-
-        data.dpi =
-            number(
-                data.dpi,
-                203
-            );
-
-
-        data.copies =
-            Math.max(
-                1,
-                Math.floor(
-                    number(
-                        data.copies,
-                        1
-                    )
-                )
-            );
-
-
-        data.density =
-            number(
-                data.density,
-                8
-            );
-
-
-        data.speed =
-            number(
-                data.speed,
-                4
-            );
-
-
-        data.gap =
-            number(
-                data.gap,
-                2
-            );
-
-
-        data.marginLeft =
-            number(
-                data.marginLeft,
-                0
-            );
-
-
-        data.marginTop =
-            number(
-                data.marginTop,
-                0
-            );
-
-
-        data.rotate =
-            number(
-                data.rotate,
-                0
-            );
-
-
-        if (
-            !data.preview ||
-            typeof data.preview !== "object"
-        ) {
-
-            data.preview =
-                clone(
-                    DEFAULTS.preview
-                );
-
-        }
-
-
-        data.preview.transparentBackground =
-            Boolean(
-                data.preview.transparentBackground
-            );
-
-
-        /*
-         * Canvas dot calculation.
-         *
-         * 100 mm @ 203 DPI ≈ 799 dots
-         * 150 mm @ 203 DPI ≈ 1199 dots
-         */
-
-        data.canvasWidth =
-            Math.round(
-                data.paperWidth /
-                25.4 *
-                data.dpi
-            );
-
-
-        data.canvasHeight =
-            Math.round(
-                data.paperHeight /
-                25.4 *
-                data.dpi
-            );
-
-
-        data.background =
-            "transparent";
-
-
-        data.inkColor =
-            "#000000";
+        return data;
 
     }
 
@@ -616,9 +371,6 @@
     */
 
     function save() {
-
-        normalize();
-
 
         try {
 
@@ -632,11 +384,11 @@
 
         }
 
-        catch (err) {
+        catch (error) {
 
             warn(
-                "Gagal menyimpan settings:",
-                err
+                "Gagal save settings:",
+                error
             );
 
 
@@ -649,27 +401,11 @@
 
     /*
     =================================================
-     GET ALL
-    =================================================
-    */
-
-    function getAll() {
-
-        return clone(data);
-
-    }
-
-
-    /*
-    =================================================
      GET
     =================================================
     */
 
-    function get(
-        key,
-        fallback = null
-    ) {
+    function get(key, fallback = null) {
 
         if (
             Object.prototype.hasOwnProperty.call(
@@ -694,25 +430,30 @@
     =================================================
     */
 
-    function set(
-        key,
-        value
-    ) {
+    function set(key, value) {
 
         if (
-            key === "printLanguage"
+            typeof key === "object" &&
+            key !== null
         ) {
 
-            value =
-                normalizeLanguage(
-                    value
-                );
+            Object.keys(key).forEach(
+                name => {
+
+                    data[name] =
+                        key[name];
+
+                }
+            );
 
         }
 
+        else {
 
-        data[key] =
-            value;
+            data[key] =
+                value;
+
+        }
 
 
         normalize();
@@ -727,230 +468,323 @@
         }
 
 
-        syncPrinter();
+        dispatch();
 
 
-        return data[key];
+        return true;
 
     }
 
 
     /*
     =================================================
-     SET LANGUAGE
+     GET ALL
     =================================================
     */
 
-    function setLanguage(
-        language
-    ) {
+    function getAll() {
 
-        const value =
-            normalizeLanguage(
-                language
-            );
+        return clone(data);
+
+    }
+
+
+    /*
+    =================================================
+     NORMALIZE
+    =================================================
+    */
+
+    function normalize() {
+
+        /*
+         * Language
+         */
+
+        if (
+            !data.printLanguage
+        ) {
+
+            data.printLanguage =
+                "ESC";
+
+        }
 
 
         data.printLanguage =
-            value;
+            String(
+                data.printLanguage
+            ).toUpperCase();
 
+
+        /*
+         * DPI
+         */
+
+        data.dpi =
+            Number(data.dpi) ||
+            203;
+
+
+        /*
+         * Label width
+         */
+
+        data.labelWidth =
+            Number(data.labelWidth) ||
+            100;
+
+
+        /*
+         * Label height
+         */
+
+        data.labelHeight =
+            Number(data.labelHeight) ||
+            150;
+
+
+        /*
+         * Paper mengikuti label
+         *
+         * kecuali user memang menggunakan
+         * paper size berbeda.
+         */
 
         if (
-            data.autoSave !== false
+            !Number(data.paperWidth)
         ) {
 
-            save();
+            data.paperWidth =
+                data.labelWidth;
 
         }
 
 
-        syncPrinter();
+        if (
+            !Number(data.paperHeight)
+        ) {
+
+            data.paperHeight =
+                data.labelHeight;
+
+        }
+
+
+        /*
+         * Canvas pixel berdasarkan DPI.
+         *
+         * 100 mm @ 203 DPI ≈ 799 dots
+         * 150 mm @ 203 DPI ≈ 1199 dots
+         */
+
+        data.canvasWidth =
+            Math.round(
+                data.labelWidth /
+                25.4 *
+                data.dpi
+            );
+
+
+        data.canvasHeight =
+            Math.round(
+                data.labelHeight /
+                25.4 *
+                data.dpi
+            );
+
+
+        /*
+         * Copies
+         */
+
+        data.copies =
+            Math.max(
+                1,
+                Number(data.copies) || 1
+            );
+
+
+        /*
+         * Density
+         */
+
+        data.density =
+            Math.max(
+                0,
+                Math.min(
+                    15,
+                    Number(data.density) || 8
+                )
+            );
+
+
+        /*
+         * Speed
+         */
+
+        data.speed =
+            Math.max(
+                1,
+                Number(data.speed) || 4
+            );
+
+
+        /*
+         * Transparent
+         */
+
+        data.transparentBackground =
+            Boolean(
+                data.transparentBackground
+            );
+
+
+        /*
+         * Background
+         */
+
+        if (
+            data.transparentBackground
+        ) {
+
+            data.background =
+                "transparent";
+
+        }
+
+    }
+
+
+    /*
+    =================================================
+     SYNC
+    =================================================
+
+     Dipanggil oleh:
+
+        Settings.sync()
+
+     setelah aplikasi mulai.
+
+    =================================================
+    */
+
+    function sync() {
+
+        load();
+
+        normalize();
+
+        save();
+
+
+        /*
+         * Sync printer language
+         */
+
+        if (
+            window.Printer &&
+            typeof window.Printer.setLanguage ===
+            "function"
+        ) {
+
+            try {
+
+                window.Printer.setLanguage(
+                    data.printLanguage
+                );
+
+            }
+
+            catch (error) {
+
+                warn(
+                    "Printer.setLanguage gagal:",
+                    error
+                );
+
+            }
+
+        }
+
+
+        /*
+         * Sync bridge URL
+         */
+
+        if (
+            window.Bluetooth &&
+            typeof window.Bluetooth.setBridgeURL ===
+            "function"
+        ) {
+
+            try {
+
+                window.Bluetooth.setBridgeURL(
+                    data.bridgeURL
+                );
+
+            }
+
+            catch (error) {}
+
+        }
 
 
         log(
-            "Printer Language:",
-            value
+            "========================================"
+        );
+
+        log(
+            "SmartPrint Settings Manager v" +
+            VERSION
+        );
+
+        log(
+            "Language:",
+            data.printLanguage
+        );
+
+        log(
+            "Paper:",
+            data.paperWidth +
+            " x " +
+            data.paperHeight +
+            " mm"
+        );
+
+        log(
+            "Label:",
+            data.labelWidth +
+            " x " +
+            data.labelHeight +
+            " mm"
+        );
+
+        log(
+            "DPI:",
+            data.dpi
+        );
+
+        log(
+            "Canvas:",
+            data.canvasWidth +
+            " x " +
+            data.canvasHeight
+        );
+
+        log(
+            "Transparent background:",
+            data.transparentBackground
+        );
+
+        log(
+            "========================================"
         );
 
 
-        return value;
-
-    }
-
-
-    /*
-    =================================================
-     GET LANGUAGE
-    =================================================
-    */
-
-    function getLanguage() {
-
-        return data.printLanguage;
-
-    }
-
-
-    /*
-    =================================================
-     SET PAPER
-    =================================================
-    */
-
-    function setPaper(
-        width,
-        height
-    ) {
-
-        data.paperWidth =
-            number(
-                width,
-                100
-            );
-
-
-        data.paperHeight =
-            number(
-                height,
-                150
-            );
-
-
-        data.labelWidth =
-            data.paperWidth;
-
-
-        data.labelHeight =
-            data.paperHeight;
-
-
-        normalize();
-
-
-        save();
-
-
-        syncPrinter();
-
-
-        return {
-
-            width:
-                data.paperWidth,
-
-            height:
-                data.paperHeight,
-
-            dpi:
-                data.dpi
-
-        };
-
-    }
-
-
-    /*
-    =================================================
-     SET DPI
-    =================================================
-    */
-
-    function setDPI(
-        dpi
-    ) {
-
-        data.dpi =
-            number(
-                dpi,
-                203
-            );
-
-
-        normalize();
-
-
-        save();
-
-
-        syncPrinter();
-
-
-        return data.dpi;
-
-    }
-
-
-    /*
-    =================================================
-     PRINTER SYNC
-    =================================================
-    */
-
-    function syncPrinter() {
-
-        if (
-            typeof window === "undefined"
-        ) {
-
-            return;
-
-        }
-
-
-        if (
-            !window.Printer
-        ) {
-
-            return;
-
-        }
-
-
-        try {
-
-            if (
-                typeof Printer.setLanguage ===
-                "function"
-            ) {
-
-                Printer.setLanguage(
-                    data.printLanguage,
-                    {
-                        silent:
-                            true
-                    }
-                );
-
-            }
-
-
-            if (
-                typeof Printer.setPaperSize ===
-                "function"
-            ) {
-
-                Printer.setPaperSize(
-                    data.paperWidth,
-                    data.paperHeight,
-                    data.dpi,
-                    {
-                        silent:
-                            true
-                    }
-                );
-
-            }
-
-        }
-
-        catch (err) {
-
-            warn(
-                "Printer sync gagal:",
-                err
-            );
-
-        }
+        return getAll();
 
     }
 
@@ -964,15 +798,15 @@
     function reset() {
 
         data =
-            clone(
-                DEFAULTS
-            );
+            clone(DEFAULTS);
 
+        normalize();
 
         save();
 
+        dispatch();
 
-        syncPrinter();
+        sync();
 
 
         return getAll();
@@ -982,72 +816,148 @@
 
     /*
     =================================================
-     INIT
+     EVENT
     =================================================
     */
 
-    function init() {
+    function dispatch() {
 
-        load();
+        try {
 
+            window.dispatchEvent(
+                new CustomEvent(
+                    "smartprint-settings-changed",
+                    {
+                        detail:
+                            getAll()
+                    }
+                )
+            );
 
-        log(
-            "========================================"
-        );
+        }
 
+        catch (error) {}
 
-        log(
-            "SmartPrint Settings Manager v" +
-            VERSION
-        );
-
-
-        log(
-            "Language:",
-            data.printLanguage
-        );
-
-
-        log(
-            "Paper:",
-            data.paperWidth +
-            " x " +
-            data.paperHeight +
-            " mm"
-        );
+    }
 
 
-        log(
-            "DPI:",
-            data.dpi
-        );
+    /*
+    =================================================
+     LABEL SIZE
+    =================================================
+    */
+
+    function setLabelSize(
+        width,
+        height
+    ) {
+
+        width =
+            Number(width);
+
+        height =
+            Number(height);
 
 
-        log(
-            "Transparent background:",
-            data.preview.transparentBackground
-        );
+        if (
+            !width ||
+            !height
+        ) {
+
+            return false;
+
+        }
 
 
-        log(
-            "========================================"
-        );
+        data.labelWidth =
+            width;
+
+        data.labelHeight =
+            height;
+
+        data.paperWidth =
+            width;
+
+        data.paperHeight =
+            height;
 
 
-        /*
-         * Printer mungkin belum dibuat
-         * saat Settings pertama kali init.
-         *
-         * Sync ditunda sebentar.
-         */
+        normalize();
 
-        setTimeout(
-            syncPrinter,
-            50
-        );
+        save();
+
+        dispatch();
 
 
-        return getAll();
+        return true;
+
+    }
+
+
+    /*
+    =================================================
+     PRINTER LANGUAGE
+    =================================================
+    */
+
+    function setLanguage(
+        language
+    ) {
+
+        language =
+            String(
+                language ||
+                "ESC"
+            ).toUpperCase();
+
+
+        const allowed = [
+            "ESC",
+            "ESCPOS",
+            "TSPL",
+            "ZPL",
+            "CPCL"
+        ];
+
+
+        if (
+            !allowed.includes(language)
+        ) {
+
+            warn(
+                "Printer language tidak dikenal:",
+                language
+            );
+
+
+            return false;
+
+        }
+
+
+        data.printLanguage =
+            language;
+
+
+        save();
+
+        dispatch();
+
+
+        if (
+            window.Printer &&
+            typeof window.Printer.setLanguage ===
+            "function"
+        ) {
+
+            window.Printer.setLanguage(
+                language
+            );
+
+        }
+
+
+        return true;
 
     }
 
@@ -1066,13 +976,11 @@
         defaults:
             clone(DEFAULTS),
 
-        init,
-
         load,
 
         save,
 
-        reset,
+        sync,
 
         get,
 
@@ -1080,15 +988,13 @@
 
         getAll,
 
-        setLanguage,
+        reset,
 
-        getLanguage,
+        normalize,
 
-        setPaper,
+        setLabelSize,
 
-        setDPI,
-
-        syncPrinter
+        setLanguage
 
     };
 
@@ -1109,34 +1015,19 @@
 
     /*
     =================================================
-     AUTO INIT
+     INITIAL LOAD
     =================================================
     */
 
-    if (
-        document.readyState ===
-        "loading"
-    ) {
+    load();
 
-        document.addEventListener(
-            "DOMContentLoaded",
-            function () {
+    normalize();
 
-                Settings.init();
 
-            },
-            {
-                once:
-                    true
-            }
-        );
-
-    }
-
-    else {
-
-        Settings.init();
-
-    }
+    console.log(
+        "[SmartPrint Settings] Settings Manager v" +
+        VERSION +
+        " Ready"
+    );
 
 })();
