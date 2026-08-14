@@ -1,76 +1,56 @@
 "use strict";
 
 /*
-==========================================================
+=====================================================
  SmartPrint Printer Manager v4.2.0
- by AppDIGI
-==========================================================
+=====================================================
 
- PURPOSE
- ---------------------------------------------------------
- Printer Manager untuk SmartPrint.
+ RESPONSIBILITY
+ ----------------------------------------------------
+ Printer Manager adalah penghubung antara:
 
- TARGET
- ---------------------------------------------------------
- - Bluetooth BLE
- - Web Serial
- - Bridge
- - RAW Uint8Array
- - TSPL
- - ESC/POS
- - Text
- - Barcode
- - QR Code
- - Image
- - Adaptive Paper / Label Size
- - Transparent Background
- - Black Ink Objects
+ Settings
+     ↓
+ Printer Manager
+     ↓
+ Bluetooth Engine
+     ↓
+ Physical Printer
 
- IMPORTANT
- ---------------------------------------------------------
- Printer Manager TIDAK mengatur Preview Engine.
-
- Preview hanya menghasilkan object/data.
- Printer Manager bertugas mengubah object menjadi
- printer command.
-
- PAPER
- ---------------------------------------------------------
- Ukuran kertas/label TIDAK dikunci.
-
- Dibaca dari:
-    Settings.labelWidth
-    Settings.labelHeight
-    Settings.paperWidth
-    Settings.paperHeight
-    Settings.dpi
-
- Contoh:
-    100 x 150 mm
-    58 x 40 mm
-    80 x 50 mm
-    dll.
-
- TRANSPARENT PRINT
- ---------------------------------------------------------
- Background putih TIDAK dikirim.
-
- Hanya object yang mempunyai data yang dicetak.
-
- DEFAULT COLOR
- ---------------------------------------------------------
- Black / #000000
+ SUPPORTED LANGUAGE
+ ----------------------------------------------------
+ ESC
+ TSPL
+ ZPL
+ CPCL
 
  TRANSPORT
- ---------------------------------------------------------
- Bluetooth.sendRaw(Uint8Array)
+ ----------------------------------------------------
+ Bluetooth BLE
+ Web Serial
+ Bridge
 
- Compatible dengan:
- SmartPrint Bluetooth Engine v5.7.0
+ RAW
+ ----------------------------------------------------
+ Uint8Array
 
-==========================================================
+ PAPER
+ ----------------------------------------------------
+ Mengikuti Settings.
+
+ Default:
+ 100 x 150 mm
+ 203 DPI
+
+ TRANSPARENT BACKGROUND
+ ----------------------------------------------------
+ Background desain tidak dikirim sebagai tinta.
+
+ Ink:
+ #000000
+
+=====================================================
 */
-
 
 (function () {
 
@@ -78,89 +58,40 @@
 
 
     /*
-    ======================================================
+    =================================================
      VERSION
-    ======================================================
+    =================================================
     */
 
-    const VERSION = "4.2.0";
+    const VERSION =
+        "4.2.0";
 
 
     /*
-    ======================================================
-     CONSTANT
-    ======================================================
-    */
-
-    const MM_PER_INCH = 25.4;
-
-
-    /*
-    ======================================================
+    =================================================
      STATE
-    ======================================================
+    =================================================
     */
 
-    let initialized = false;
+    const state = {
 
-    let printing = false;
+        initialized:
+            false,
 
-    let connected = false;
+        connected:
+            false,
 
-    let currentLanguage = "ESC";
-
-    let currentPrinter = null;
-
-    let lastJob = null;
-
-
-    /*
-    ======================================================
-     DEFAULT SETTINGS
-    ======================================================
-    */
-
-    const DEFAULT_SETTINGS = {
-
-        appName:
-            "SmartPrint by AppDIGI",
-
-        version:
-            VERSION,
+        connecting:
+            false,
 
         language:
-            "id",
-
-        /*
-         * Printer
-         */
-
-        printerName:
-            "",
-
-        printLanguage:
             "ESC",
 
         paperWidth:
-            80,
+            100,
 
         paperHeight:
             150,
-
-        labelWidth:
-            100,
-
-        labelHeight:
-            150,
-
-        gap:
-            2,
-
-        marginLeft:
-            0,
-
-        marginTop:
-            0,
 
         dpi:
             203,
@@ -180,490 +111,108 @@
         openDrawer:
             false,
 
-        rotate:
-            0,
-
-        /*
-         * Barcode
-         */
-
-        barcodeType:
-            "CODE128",
-
-        barcodeWidth:
-            2,
-
-        barcodeHeight:
-            50,
-
-        barcodeHumanReadable:
+        transparentBackground:
             true,
 
-        /*
-         * QR
-         */
+        status:
+            "disconnected",
 
-        qrSize:
-            100,
+        deviceName:
+            "",
 
-        qrErrorCorrection:
-            "M"
+        connectionType:
+            null,
+
+        lastError:
+            null
 
     };
 
 
     /*
-    ======================================================
+    =================================================
      LOG
-    ======================================================
+    =================================================
     */
 
-    function log() {
+    function log(...args) {
 
         console.log(
             "[SmartPrint Printer]",
-            ...arguments
+            ...args
         );
 
     }
 
 
-    function warn() {
+    function warn(...args) {
 
         console.warn(
             "[SmartPrint Printer]",
-            ...arguments
+            ...args
         );
 
     }
 
 
-    function error() {
+    function error(...args) {
 
         console.error(
             "[SmartPrint Printer]",
-            ...arguments
+            ...args
         );
 
     }
 
 
     /*
-    ======================================================
-     STORAGE
-    ======================================================
+    =================================================
+     DISPATCH
+    =================================================
     */
 
-    function readSettings() {
-
-        let result = {};
+    function dispatch(
+        name,
+        detail = {}
+    ) {
 
         try {
 
-            const raw =
-                localStorage.getItem(
-                    "SMARTPRINT_SETTINGS"
-                );
+            window.dispatchEvent(
+                new CustomEvent(
+                    "smartprint-printer-" +
+                    name,
+                    {
+                        detail: {
 
-            if (raw) {
+                            ...detail,
 
-                result =
-                    JSON.parse(raw);
+                            state:
+                                getState()
 
-            }
+                        }
+                    }
+                )
+            );
 
         }
 
         catch (err) {
 
             warn(
-                "Gagal membaca SMARTPRINT_SETTINGS:",
+                "Dispatch error:",
                 err
             );
 
         }
 
-
-        return Object.assign(
-            {},
-            DEFAULT_SETTINGS,
-            result || {}
-        );
-
-    }
-
-
-    function saveSettings(settings) {
-
-        try {
-
-            localStorage.setItem(
-                "SMARTPRINT_SETTINGS",
-                JSON.stringify(
-                    settings
-                )
-            );
-
-            return true;
-
-        }
-
-        catch (err) {
-
-            warn(
-                "Gagal menyimpan settings:",
-                err
-            );
-
-            return false;
-
-        }
-
     }
 
 
     /*
-    ======================================================
-     SETTINGS
-    ======================================================
-    */
-
-    function getSettings() {
-
-        const settings =
-            readSettings();
-
-        /*
-         * Normalisasi nilai.
-         */
-
-        settings.labelWidth =
-            positiveNumber(
-                settings.labelWidth,
-                settings.paperWidth || 80
-            );
-
-        settings.labelHeight =
-            positiveNumber(
-                settings.labelHeight,
-                settings.paperHeight || 150
-            );
-
-        settings.paperWidth =
-            positiveNumber(
-                settings.paperWidth,
-                settings.labelWidth
-            );
-
-        settings.paperHeight =
-            positiveNumber(
-                settings.paperHeight,
-                settings.labelHeight
-            );
-
-        settings.dpi =
-            positiveNumber(
-                settings.dpi,
-                203
-            );
-
-        settings.gap =
-            nonNegativeNumber(
-                settings.gap,
-                0
-            );
-
-        settings.marginLeft =
-            nonNegativeNumber(
-                settings.marginLeft,
-                0
-            );
-
-        settings.marginTop =
-            nonNegativeNumber(
-                settings.marginTop,
-                0
-            );
-
-        settings.copies =
-            Math.max(
-                1,
-                Math.floor(
-                    positiveNumber(
-                        settings.copies,
-                        1
-                    )
-                )
-            );
-
-
-        return settings;
-
-    }
-
-
-    function updateSettings(
-        values
-    ) {
-
-        const current =
-            getSettings();
-
-        const next =
-            Object.assign(
-                {},
-                current,
-                values || {}
-            );
-
-        saveSettings(
-            next
-        );
-
-        return getSettings();
-
-    }
-
-
-    /*
-    ======================================================
-     NUMBER HELPERS
-    ======================================================
-    */
-
-    function positiveNumber(
-        value,
-        fallback
-    ) {
-
-        const number =
-            Number(value);
-
-        if (
-            Number.isFinite(number) &&
-            number > 0
-        ) {
-
-            return number;
-
-        }
-
-        return Number(
-            fallback
-        ) || 1;
-
-    }
-
-
-    function nonNegativeNumber(
-        value,
-        fallback
-    ) {
-
-        const number =
-            Number(value);
-
-        if (
-            Number.isFinite(number) &&
-            number >= 0
-        ) {
-
-            return number;
-
-        }
-
-        return Number(
-            fallback
-        ) || 0;
-
-    }
-
-
-    /*
-    ======================================================
-     PAPER SIZE
-    ======================================================
-    */
-
-    function getPaperSize() {
-
-        const settings =
-            getSettings();
-
-        /*
-         * Untuk label printer,
-         * labelWidth / labelHeight
-         * menjadi prioritas.
-         */
-
-        const width =
-            positiveNumber(
-                settings.labelWidth,
-                settings.paperWidth
-            );
-
-        const height =
-            positiveNumber(
-                settings.labelHeight,
-                settings.paperHeight
-            );
-
-        return {
-
-            width,
-            height,
-
-            dpi:
-                positiveNumber(
-                    settings.dpi,
-                    203
-                ),
-
-            gap:
-                nonNegativeNumber(
-                    settings.gap,
-                    0
-                ),
-
-            marginLeft:
-                nonNegativeNumber(
-                    settings.marginLeft,
-                    0
-                ),
-
-            marginTop:
-                nonNegativeNumber(
-                    settings.marginTop,
-                    0
-                )
-
-        };
-
-    }
-
-
-    /*
-    ======================================================
-     MM -> DOT
-    ======================================================
-    */
-
-    function mmToDots(
-        mm,
-        dpi
-    ) {
-
-        return Math.round(
-            Number(mm) *
-            Number(dpi) /
-            MM_PER_INCH
-        );
-
-    }
-
-
-    /*
-    ======================================================
-     DOT -> MM
-    ======================================================
-    */
-
-    function dotsToMm(
-        dots,
-        dpi
-    ) {
-
-        return (
-            Number(dots) *
-            MM_PER_INCH /
-            Number(dpi)
-        );
-
-    }
-
-
-    /*
-    ======================================================
-     PAPER DOT SIZE
-    ======================================================
-    */
-
-    function getPaperDots() {
-
-        const paper =
-            getPaperSize();
-
-        return {
-
-            width:
-                mmToDots(
-                    paper.width,
-                    paper.dpi
-                ),
-
-            height:
-                mmToDots(
-                    paper.height,
-                    paper.dpi
-                ),
-
-            dpi:
-                paper.dpi
-
-        };
-
-    }
-
-
-    /*
-    ======================================================
-     PAPER INFO
-    ======================================================
-    */
-
-    function getPaperInfo() {
-
-        const paper =
-            getPaperSize();
-
-        const dots =
-            getPaperDots();
-
-        return {
-
-            widthMm:
-                paper.width,
-
-            heightMm:
-                paper.height,
-
-            dpi:
-                paper.dpi,
-
-            widthDots:
-                dots.width,
-
-            heightDots:
-                dots.height,
-
-            gapMm:
-                paper.gap,
-
-            marginLeftMm:
-                paper.marginLeft,
-
-            marginTopMm:
-                paper.marginTop
-
-        };
-
-    }
-
-
-    /*
-    ======================================================
-     LANGUAGE
-    ======================================================
+    =================================================
+     NORMALIZE LANGUAGE
+    =================================================
     */
 
     function normalizeLanguage(
@@ -673,42 +222,13 @@
         const value =
             String(
                 language ||
-                ""
+                "ESC"
             )
             .trim()
             .toUpperCase();
 
 
         if (
-            value === "TSPL"
-        ) {
-
-            return "TSPL";
-
-        }
-
-
-        if (
-            value === "ZPL"
-        ) {
-
-            return "ZPL";
-
-        }
-
-
-        if (
-            value === "CPCL"
-        ) {
-
-            return "CPCL";
-
-        }
-
-
-        if (
-            value === "ESC" ||
-            value === "ESC/POS" ||
             value === "ESCPOS"
         ) {
 
@@ -717,143 +237,1095 @@
         }
 
 
+        if (
+            [
+                "ESC",
+                "TSPL",
+                "ZPL",
+                "CPCL"
+            ].includes(value)
+        ) {
+
+            return value;
+
+        }
+
+
+        warn(
+            "Language tidak dikenal:",
+            language,
+            "→ ESC"
+        );
+
+
         return "ESC";
 
     }
 
 
-    function getPrinterLanguage() {
+    /*
+    =================================================
+     NUMBER
+    =================================================
+    */
 
-        const settings =
-            getSettings();
-
-        return normalizeLanguage(
-            settings.printLanguage
-        );
-
-    }
-
-
-    function setPrinterLanguage(
-        language
+    function number(
+        value,
+        fallback
     ) {
 
-        const normalized =
-            normalizeLanguage(
-                language
-            );
-
-        currentLanguage =
-            normalized;
-
-        updateSettings({
-
-            printLanguage:
-                normalized
-
-        });
+        const n =
+            Number(value);
 
 
-        log(
-            "Printer Language:",
-            normalized
-        );
-
-
-        return normalized;
+        return Number.isFinite(n)
+            ? n
+            : fallback;
 
     }
 
 
     /*
-    ======================================================
-     UINT8 NORMALIZATION
-    ======================================================
+    =================================================
+     GET SETTINGS
+    =================================================
     */
 
-    function normalizeBytes(
+    function readSettings() {
+
+        if (
+            typeof window === "undefined" ||
+            !window.Settings
+        ) {
+
+            return;
+
+        }
+
+
+        try {
+
+            const settings =
+                Settings.getAll();
+
+
+            if (!settings) {
+
+                return;
+
+            }
+
+
+            state.language =
+                normalizeLanguage(
+                    settings.printLanguage ||
+                    state.language
+                );
+
+
+            state.paperWidth =
+                number(
+                    settings.paperWidth,
+                    100
+                );
+
+
+            state.paperHeight =
+                number(
+                    settings.paperHeight,
+                    150
+                );
+
+
+            state.dpi =
+                number(
+                    settings.dpi,
+                    203
+                );
+
+
+            state.copies =
+                Math.max(
+                    1,
+                    Math.floor(
+                        number(
+                            settings.copies,
+                            1
+                        )
+                    )
+                );
+
+
+            state.density =
+                number(
+                    settings.density,
+                    8
+                );
+
+
+            state.speed =
+                number(
+                    settings.speed,
+                    4
+                );
+
+
+            state.cutPaper =
+                Boolean(
+                    settings.cutPaper
+                );
+
+
+            state.openDrawer =
+                Boolean(
+                    settings.openDrawer
+                );
+
+
+            if (
+                settings.preview &&
+                typeof settings.preview ===
+                "object"
+            ) {
+
+                state.transparentBackground =
+                    settings.preview
+                        .transparentBackground !== false;
+
+            }
+
+            else {
+
+                state.transparentBackground =
+                    true;
+
+            }
+
+
+        }
+
+        catch (err) {
+
+            warn(
+                "Gagal membaca Settings:",
+                err
+            );
+
+        }
+
+    }
+
+
+    /*
+    =================================================
+     SET LANGUAGE
+    =================================================
+    */
+
+    function setLanguage(
+        language,
+        options = {}
+    ) {
+
+        const value =
+            normalizeLanguage(
+                language
+            );
+
+
+        state.language =
+            value;
+
+
+        /*
+         * Sinkronisasi balik ke Settings.
+         *
+         * Jangan panggil Settings.setLanguage()
+         * di sini karena dapat membuat recursion.
+         */
+
+        if (
+            !options.silent &&
+            typeof window !== "undefined" &&
+            window.Settings
+        ) {
+
+            try {
+
+                if (
+                    typeof Settings.setLanguage ===
+                    "function"
+                ) {
+
+                    /*
+                     * Settings.setLanguage() akan
+                     * menyimpan konfigurasi.
+                     */
+
+                    Settings.setLanguage(
+                        value
+                    );
+
+                }
+
+            }
+
+            catch (err) {
+
+                warn(
+                    "Gagal sync language ke Settings:",
+                    err
+                );
+
+            }
+
+        }
+
+
+        log(
+            "Printer Language:",
+            value
+        );
+
+
+        dispatch(
+            "language",
+            {
+                language:
+                    value
+            }
+        );
+
+
+        return value;
+
+    }
+
+
+    /*
+    =================================================
+     GET LANGUAGE
+    =================================================
+    */
+
+    function getLanguage() {
+
+        return state.language;
+
+    }
+
+
+    /*
+    =================================================
+     SET PAPER SIZE
+    =================================================
+    */
+
+    function setPaperSize(
+        width,
+        height,
+        dpi = state.dpi,
+        options = {}
+    ) {
+
+        state.paperWidth =
+            number(
+                width,
+                100
+            );
+
+
+        state.paperHeight =
+            number(
+                height,
+                150
+            );
+
+
+        state.dpi =
+            number(
+                dpi,
+                203
+            );
+
+
+        log(
+            "Paper:",
+            state.paperWidth +
+            " x " +
+            state.paperHeight +
+            " mm"
+        );
+
+
+        log(
+            "DPI:",
+            state.dpi
+        );
+
+
+        dispatch(
+            "papersize",
+            {
+
+                width:
+                    state.paperWidth,
+
+                height:
+                    state.paperHeight,
+
+                dpi:
+                    state.dpi
+
+            }
+        );
+
+
+        return {
+
+            width:
+                state.paperWidth,
+
+            height:
+                state.paperHeight,
+
+            dpi:
+                state.dpi
+
+        };
+
+    }
+
+
+    /*
+    =================================================
+     GET PAPER SIZE
+    =================================================
+    */
+
+    function getPaperSize() {
+
+        return {
+
+            width:
+                state.paperWidth,
+
+            height:
+                state.paperHeight,
+
+            dpi:
+                state.dpi
+
+        };
+
+    }
+
+
+    /*
+    =================================================
+     CONNECTION
+    =================================================
+    */
+
+    async function connect() {
+
+        if (
+            state.connecting
+        ) {
+
+            warn(
+                "Printer sedang connecting."
+            );
+
+
+            return false;
+
+        }
+
+
+        /*
+         * Jika sudah connected.
+         */
+
+        if (
+            isConnected()
+        ) {
+
+            log(
+                "Printer sudah connected."
+            );
+
+
+            updateConnectionInfo();
+
+
+            return true;
+
+        }
+
+
+        state.connecting =
+            true;
+
+
+        state.status =
+            "connecting";
+
+
+        state.lastError =
+            null;
+
+
+        dispatch(
+            "connecting"
+        );
+
+
+        log(
+            "========================================"
+        );
+
+
+        log(
+            "PRINTER CONNECT"
+        );
+
+
+        log(
+            "========================================"
+        );
+
+
+        try {
+
+            /*
+             * Bluetooth adalah transport utama.
+             */
+
+            if (
+                typeof window !== "undefined" &&
+                window.Bluetooth
+            ) {
+
+                log(
+                    "Bluetooth.connectUser()"
+                );
+
+
+                const result =
+                    await Bluetooth.connectUser();
+
+
+                if (
+                    result &&
+                    Bluetooth.isConnected()
+                ) {
+
+                    state.connected =
+                        true;
+
+
+                    state.status =
+                        "connected";
+
+
+                    updateConnectionInfo();
+
+
+                    dispatch(
+                        "connected",
+                        {
+
+                            info:
+                                Bluetooth.getInfo()
+
+                        }
+                    );
+
+
+                    log(
+                        "========================================"
+                    );
+
+
+                    log(
+                        "PRINTER CONNECTED"
+                    );
+
+
+                    log(
+                        "========================================"
+                    );
+
+
+                    return true;
+
+                }
+
+            }
+
+
+            state.connected =
+                false;
+
+
+            state.status =
+                "disconnected";
+
+
+            warn(
+                "Printer belum terhubung."
+            );
+
+
+            dispatch(
+                "disconnected"
+            );
+
+
+            return false;
+
+        }
+
+        catch (err) {
+
+            state.connected =
+                false;
+
+
+            state.status =
+                "error";
+
+
+            state.lastError =
+                err;
+
+
+            error(
+                "Printer connect error:",
+                err
+            );
+
+
+            dispatch(
+                "error",
+                {
+                    error:
+                        err
+                }
+            );
+
+
+            return false;
+
+        }
+
+        finally {
+
+            state.connecting =
+                false;
+
+
+            dispatch(
+                "status"
+            );
+
+        }
+
+    }
+
+
+    /*
+    =================================================
+     CONNECT BLUETOOTH
+    =================================================
+    */
+
+    async function connectBluetooth() {
+
+        return await connect();
+
+    }
+
+
+    /*
+    =================================================
+     DISCONNECT
+    =================================================
+    */
+
+    async function disconnect() {
+
+        try {
+
+            if (
+                typeof window !== "undefined" &&
+                window.Bluetooth
+            ) {
+
+                await Bluetooth.disconnect();
+
+            }
+
+        }
+
+        catch (err) {
+
+            warn(
+                "Bluetooth disconnect error:",
+                err
+            );
+
+        }
+
+
+        state.connected =
+            false;
+
+
+        state.connecting =
+            false;
+
+
+        state.status =
+            "disconnected";
+
+
+        state.deviceName =
+            "";
+
+
+        state.connectionType =
+            null;
+
+
+        dispatch(
+            "disconnected"
+        );
+
+
+        return true;
+
+    }
+
+
+    /*
+    =================================================
+     IS CONNECTED
+    =================================================
+    */
+
+    function isConnected() {
+
+        if (
+            typeof window !== "undefined" &&
+            window.Bluetooth &&
+            typeof Bluetooth.isConnected ===
+            "function"
+        ) {
+
+            try {
+
+                return Boolean(
+                    Bluetooth.isConnected()
+                );
+
+            }
+
+            catch (err) {}
+
+        }
+
+
+        return Boolean(
+            state.connected
+        );
+
+    }
+
+
+    /*
+    =================================================
+     UPDATE CONNECTION INFO
+    =================================================
+    */
+
+    function updateConnectionInfo() {
+
+        if (
+            typeof window === "undefined" ||
+            !window.Bluetooth
+        ) {
+
+            return;
+
+        }
+
+
+        try {
+
+            const info =
+                Bluetooth.getInfo();
+
+
+            state.connected =
+                Boolean(
+                    info.connected
+                );
+
+
+            state.deviceName =
+                info.deviceName ||
+                "";
+
+
+            state.connectionType =
+                info.type ||
+                null;
+
+
+            if (
+                state.connected
+            ) {
+
+                state.status =
+                    "connected";
+
+            }
+
+            else {
+
+                state.status =
+                    "disconnected";
+
+            }
+
+
+            return info;
+
+        }
+
+        catch (err) {
+
+            return null;
+
+        }
+
+    }
+
+
+    /*
+    =================================================
+     PRINT RAW
+    =================================================
+    */
+
+    async function printRaw(
         data
     ) {
+
+        if (
+            typeof window === "undefined" ||
+            !window.Bluetooth
+        ) {
+
+            throw new Error(
+                "Bluetooth Engine tidak tersedia."
+            );
+
+        }
+
+
+        if (
+            !Bluetooth.isConnected()
+        ) {
+
+            throw new Error(
+                "Printer belum terhubung."
+            );
+
+        }
+
+
+        let bytes;
+
 
         if (
             data instanceof Uint8Array
         ) {
 
-            return data;
+            bytes =
+                data;
 
         }
 
-
-        if (
+        else if (
             data instanceof ArrayBuffer
         ) {
 
-            return new Uint8Array(
-                data
-            );
+            bytes =
+                new Uint8Array(
+                    data
+                );
 
         }
 
-
-        if (
+        else if (
             ArrayBuffer.isView(data)
         ) {
 
-            return new Uint8Array(
-                data.buffer,
-                data.byteOffset,
-                data.byteLength
+            bytes =
+                new Uint8Array(
+                    data.buffer,
+                    data.byteOffset,
+                    data.byteLength
+                );
+
+        }
+
+        else {
+
+            throw new TypeError(
+                "printRaw() membutuhkan Uint8Array."
             );
 
         }
 
 
         if (
-            Array.isArray(data)
+            bytes.length === 0
         ) {
 
-            return new Uint8Array(
-                data
+            throw new Error(
+                "Data printer kosong."
             );
 
         }
 
 
-        throw new TypeError(
-            "Printer: data harus Uint8Array, ArrayBuffer, TypedArray, atau Array."
+        log(
+            "PRINT RAW:",
+            bytes.length,
+            "bytes"
+        );
+
+
+        try {
+
+            const result =
+                await Bluetooth.sendRaw(
+                    bytes
+                );
+
+
+            dispatch(
+                "print",
+                {
+
+                    bytes:
+                        bytes.length,
+
+                    language:
+                        state.language
+
+                }
+            );
+
+
+            return result;
+
+        }
+
+        catch (err) {
+
+            state.lastError =
+                err;
+
+
+            error(
+                "Print RAW gagal:",
+                err
+            );
+
+
+            dispatch(
+                "error",
+                {
+                    error:
+                        err
+                }
+            );
+
+
+            throw err;
+
+        }
+
+    }
+
+
+    /*
+    =================================================
+     ALIASES
+    =================================================
+    */
+
+    async function print(
+        data
+    ) {
+
+        return await printRaw(
+            data
+        );
+
+    }
+
+
+    async function sendRaw(
+        data
+    ) {
+
+        return await printRaw(
+            data
+        );
+
+    }
+
+
+    async function writeRaw(
+        data
+    ) {
+
+        return await printRaw(
+            data
         );
 
     }
 
 
     /*
-    ======================================================
-     CONCAT BYTES
-    ======================================================
+    =================================================
+     TEST PRINT
+    =================================================
+
+     Test print sederhana.
+
+     Untuk tahap awal menggunakan ESC/POS.
+
+     Tidak bergantung pada preview.
+    =================================================
     */
 
-    function concatBytes() {
+    async function testPrint() {
 
-        const arrays =
-            Array.prototype
-                .slice
-                .call(
-                    arguments
-                )
-                .map(
-                    normalizeBytes
-                );
+        if (
+            !isConnected()
+        ) {
 
+            throw new Error(
+                "Printer belum terhubung."
+            );
+
+        }
+
+
+        /*
+         * Jika language bukan ESC,
+         * test print tetap dikirim sebagai
+         * raw text sederhana hanya untuk
+         * diagnosis koneksi.
+         */
+
+        const encoder =
+            new TextEncoder();
+
+
+        const text =
+            "SMARTPRINT by AppDIGI\n" +
+            "================================\n" +
+            "PRINTER TEST\n" +
+            "Language : " +
+            state.language +
+            "\n" +
+            "Paper    : " +
+            state.paperWidth +
+            " x " +
+            state.paperHeight +
+            " mm\n" +
+            "DPI      : " +
+            state.dpi +
+            "\n" +
+            "Status   : CONNECTED\n" +
+            "================================\n\n";
+
+
+        const textBytes =
+            encoder.encode(
+                text
+            );
+
+
+        /*
+         * ESC/POS:
+         *
+         * ESC @
+         * text
+         * LF
+         */
+
+        const esc =
+            new Uint8Array(
+                [
+                    0x1B,
+                    0x40
+                ]
+            );
+
+
+        const lf =
+            new Uint8Array(
+                [
+                    0x0A,
+                    0x0A,
+                    0x0A
+                ]
+            );
+
+
+        const bytes =
+            concat(
+                esc,
+                textBytes,
+                lf
+            );
+
+
+        return await printRaw(
+            bytes
+        );
+
+    }
+
+
+    /*
+    =================================================
+     CONCAT
+    =================================================
+    */
+
+    function concat(
+        ...arrays
+    ) {
 
         let total =
             0;
 
 
         arrays.forEach(
-            item => {
+            array => {
 
                 total +=
-                    item.length;
+                    array.length;
 
             }
         );
@@ -870,15 +1342,16 @@
 
 
         arrays.forEach(
-            item => {
+            array => {
 
                 result.set(
-                    item,
+                    array,
                     offset
                 );
 
+
                 offset +=
-                    item.length;
+                    array.length;
 
             }
         );
@@ -890,1039 +1363,14 @@
 
 
     /*
-    ======================================================
-     TEXT ENCODING
-    ======================================================
+    =================================================
+     GET STATUS
+    =================================================
     */
 
-    function textBytes(
-        text
-    ) {
+    function getStatus() {
 
-        const value =
-            String(
-                text === undefined ||
-                text === null
-                    ? ""
-                    : text
-            );
-
-
-        /*
-         * Printer thermal biasanya
-         * menggunakan UTF-8 hanya pada
-         * printer yang mendukungnya.
-
-         * Untuk command ASCII,
-         * gunakan TextEncoder.
-         */
-
-        if (
-            typeof TextEncoder !==
-            "undefined"
-        ) {
-
-            return new TextEncoder()
-                .encode(
-                    value
-                );
-
-        }
-
-
-        const bytes =
-            new Uint8Array(
-                value.length
-            );
-
-
-        for (
-            let i = 0;
-            i < value.length;
-            i++
-        ) {
-
-            bytes[i] =
-                value.charCodeAt(i) &
-                0xff;
-
-        }
-
-
-        return bytes;
-
-    }
-
-
-    function ascii(
-        text
-    ) {
-
-        return textBytes(
-            text
-        );
-
-    }
-
-
-    /*
-    ======================================================
-     STRING REPEAT
-    ======================================================
-    */
-
-    function repeat(
-        character,
-        count
-    ) {
-
-        return new Array(
-            Math.max(
-                0,
-                Number(count) || 0
-            ) + 1
-        )
-        .join(
-            character
-        );
-
-    }
-
-
-    /*
-    ======================================================
-     CLAMP
-    ======================================================
-    */
-
-    function clamp(
-        value,
-        min,
-        max
-    ) {
-
-        return Math.min(
-            max,
-            Math.max(
-                min,
-                value
-            )
-        );
-
-    }
-
-
-    /*
-    ======================================================
-     COLOR
-    ======================================================
-    */
-
-    function normalizeColor(
-        color
-    ) {
-
-        if (
-            !color
-        ) {
-
-            return "#000000";
-
-        }
-
-
-        const value =
-            String(
-                color
-            )
-            .trim()
-            .toUpperCase();
-
-
-        if (
-            value ===
-            "BLACK"
-        ) {
-
-            return "#000000";
-
-        }
-
-
-        if (
-            value ===
-            "WHITE"
-        ) {
-
-            return "#FFFFFF";
-
-        }
-
-
-        if (
-            /^#[0-9A-F]{6}$/
-            .test(
-                value
-            )
-        ) {
-
-            return value;
-
-        }
-
-
-        if (
-            /^#[0-9A-F]{3}$/
-            .test(
-                value
-            )
-        ) {
-
-            return "#" +
-                value[1] +
-                value[1] +
-                value[2] +
-                value[2] +
-                value[3] +
-                value[3];
-
-        }
-
-
-        return "#000000";
-
-    }
-
-
-    function isBlack(
-        color
-    ) {
-
-        return (
-            normalizeColor(
-                color
-            ) ===
-            "#000000"
-        );
-
-    }
-
-
-    /*
-    ======================================================
-     TRANSPARENT BACKGROUND
-    ======================================================
-    */
-
-    function isTransparentBackground(
-        object
-    ) {
-
-        if (
-            !object
-        ) {
-
-            return true;
-
-        }
-
-
-        const background =
-            object.background ||
-            object.fill ||
-            object.color;
-
-
-        if (
-            !background
-        ) {
-
-            return true;
-
-        }
-
-
-        const value =
-            String(
-                background
-            )
-            .trim()
-            .toLowerCase();
-
-
-        return (
-            value === "transparent" ||
-            value === "none" ||
-            value === "null"
-        );
-
-    }
-
-
-    /*
-    ======================================================
-     OBJECT BLACK CHECK
-    ======================================================
-    */
-
-    function shouldPrintObject(
-        object
-    ) {
-
-        if (
-            !object
-        ) {
-
-            return false;
-
-        }
-
-
-        if (
-            object.visible === false
-        ) {
-
-            return false;
-
-        }
-
-
-        /*
-         * Locked object tetap dicetak.
-         */
-
-        /*
-         * Background putih tidak dicetak.
-         */
-
-        if (
-            object.isBackground === true
-        ) {
-
-            return false;
-
-        }
-
-
-        if (
-            object.type ===
-            "background"
-        ) {
-
-            return false;
-
-        }
-
-
-        return true;
-
-    }
-
-
-    /*
-    ======================================================
-     OBJECT POSITION
-    ======================================================
-    */
-
-    function objectNumber(
-        object,
-        key,
-        fallback
-    ) {
-
-        if (
-            !object
-        ) {
-
-            return fallback;
-
-        }
-
-
-        const value =
-            Number(
-                object[key]
-            );
-
-
-        return Number.isFinite(
-            value
-        )
-            ? value
-            : fallback;
-
-    }
-
-
-    function getObjectX(
-        object
-    ) {
-
-        return objectNumber(
-            object,
-            "x",
-            0
-        );
-
-    }
-
-
-    function getObjectY(
-        object
-    ) {
-
-        return objectNumber(
-            object,
-            "y",
-            0
-        );
-
-    }
-
-
-    function getObjectWidth(
-        object
-    ) {
-
-        return objectNumber(
-            object,
-            "width",
-            0
-        );
-
-    }
-
-
-    function getObjectHeight(
-        object
-    ) {
-
-        return objectNumber(
-            object,
-            "height",
-            0
-        );
-
-    }
-
-
-    function getObjectRotation(
-        object
-    ) {
-
-        return objectNumber(
-            object,
-            "rotation",
-            0
-        );
-
-    }
-
-
-    /*
-    ======================================================
-     GET OBJECT TYPE
-    ======================================================
-    */
-
-    function getObjectType(
-        object
-    ) {
-
-        if (
-            !object
-        ) {
-
-            return "";
-
-        }
-
-
-        return String(
-            object.type ||
-            object.objectType ||
-            object.kind ||
-            ""
-        )
-        .trim()
-        .toLowerCase();
-
-    }
-
-
-    /*
-    ======================================================
-     OBJECT TEXT
-    ======================================================
-    */
-
-    function getObjectText(
-        object
-    ) {
-
-        if (
-            !object
-        ) {
-
-            return "";
-
-        }
-
-
-        return String(
-            object.text !== undefined
-                ? object.text
-                : object.value !== undefined
-                    ? object.value
-                    : object.content !== undefined
-                        ? object.content
-                        : ""
-        );
-
-    }
-
-
-    /*
-    ======================================================
-     OBJECT DATA
-    ======================================================
-    */
-
-    function getObjectData(
-        object
-    ) {
-
-        if (
-            !object
-        ) {
-
-            return null;
-
-        }
-
-
-        return (
-            object.data ||
-            object.src ||
-            object.imageData ||
-            object.url ||
-            null
-        );
-
-    }
-
-
-    /*
-    ======================================================
-     SCALE
-    ======================================================
-    */
-
-    function getScale(
-        object
-    ) {
-
-        if (
-            !object
-        ) {
-
-            return 1;
-
-        }
-
-
-        const scale =
-            Number(
-                object.scale
-            );
-
-
-        return (
-            Number.isFinite(
-                scale
-            ) &&
-            scale > 0
-        )
-            ? scale
-            : 1;
-
-    }
-
-
-    /*
-    ======================================================
-     OBJECT TO DOT RECT
-    ======================================================
-    */
-
-    function objectToDots(
-        object
-    ) {
-
-        const paper =
-            getPaperSize();
-
-
-        const x =
-            mmToDots(
-                getObjectX(object),
-                paper.dpi
-            );
-
-
-        const y =
-            mmToDots(
-                getObjectY(object),
-                paper.dpi
-            );
-
-
-        const width =
-            mmToDots(
-                getObjectWidth(object),
-                paper.dpi
-            );
-
-
-        const height =
-            mmToDots(
-                getObjectHeight(object),
-                paper.dpi
-            );
-
-
-        return {
-
-            x,
-            y,
-            width,
-            height,
-
-            rotation:
-                getObjectRotation(
-                    object
-                )
-
-        };
-
-    }
-
-
-    /*
-    ======================================================
-     PRINTER CONNECTION
-    ======================================================
-    */
-
-    function getBluetooth() {
-
-        if (
-            typeof window ===
-            "undefined"
-        ) {
-
-            return null;
-
-        }
-
-
-        if (
-            window.Bluetooth
-        ) {
-
-            return window.Bluetooth;
-
-        }
-
-
-        if (
-            window.SmartPrintBluetooth
-        ) {
-
-            return window.SmartPrintBluetooth;
-
-        }
-
-
-        if (
-            window.BluetoothEngine
-        ) {
-
-            return window.BluetoothEngine;
-
-        }
-
-
-        return null;
-
-    }
-
-
-    /*
-    ======================================================
-     CHECK BLUETOOTH
-    ======================================================
-    */
-
-    function hasBluetooth() {
-
-        return Boolean(
-            getBluetooth()
-        );
-
-    }
-
-
-    /*
-    ======================================================
-     CONNECT
-    ======================================================
-    */
-
-    async function connect() {
-
-        const bluetooth =
-            getBluetooth();
-
-
-        if (
-            !bluetooth
-        ) {
-
-            throw new Error(
-                "SmartPrint Bluetooth Engine tidak ditemukan."
-            );
-
-        }
-
-
-        log(
-            "Connecting printer..."
-        );
-
-
-        let result =
-            false;
-
-
-        /*
-         * User connection.
-         * Ini boleh membuka picker.
-         */
-
-        if (
-            typeof bluetooth.connectUser ===
-            "function"
-        ) {
-
-            result =
-                await bluetooth.connectUser();
-
-        }
-
-        else if (
-            typeof bluetooth.connectBLE ===
-            "function"
-        ) {
-
-            result =
-                await bluetooth.connectBLE();
-
-        }
-
-        else if (
-            typeof bluetooth.connect ===
-            "function"
-        ) {
-
-            result =
-                await bluetooth.connect();
-
-        }
-
-
-        connected =
-            Boolean(
-                result
-            );
-
-
-        if (
-            connected
-        ) {
-
-            try {
-
-                currentPrinter =
-                    typeof bluetooth.getInfo ===
-                    "function"
-                        ? bluetooth.getInfo()
-                        : null;
-
-            }
-
-            catch (e) {
-
-                currentPrinter =
-                    null;
-
-            }
-
-
-            dispatch(
-                "connected",
-                {
-                    printer:
-                        currentPrinter
-                }
-            );
-
-        }
-
-
-        return connected;
-
-    }
-
-
-    /*
-    ======================================================
-     CONNECT NEW
-    ======================================================
-    */
-
-    async function connectNew() {
-
-        const bluetooth =
-            getBluetooth();
-
-
-        if (
-            !bluetooth
-        ) {
-
-            throw new Error(
-                "SmartPrint Bluetooth Engine tidak ditemukan."
-            );
-
-        }
-
-
-        if (
-            typeof bluetooth.connectBLENew ===
-            "function"
-        ) {
-
-            const result =
-                await bluetooth.connectBLENew();
-
-
-            connected =
-                Boolean(
-                    result
-                );
-
-
-            return connected;
-
-        }
-
-
-        return connect();
-
-    }
-
-
-    /*
-    ======================================================
-     AUTO CONNECT
-    ======================================================
-    */
-
-    async function autoConnect() {
-
-        const bluetooth =
-            getBluetooth();
-
-
-        if (
-            !bluetooth
-        ) {
-
-            warn(
-                "Bluetooth Engine belum tersedia."
-            );
-
-
-            return false;
-
-        }
-
-
-        if (
-            typeof bluetooth.autoConnect !==
-            "function"
-        ) {
-
-            return false;
-
-        }
-
-
-        try {
-
-            const result =
-                await bluetooth.autoConnect();
-
-
-            connected =
-                Boolean(
-                    result
-                );
-
-
-            return connected;
-
-        }
-
-        catch (err) {
-
-            warn(
-                "Auto connect gagal:",
-                err
-            );
-
-
-            return false;
-
-        }
-
-    }
-
-
-    /*
-    ======================================================
-     DISCONNECT
-    ======================================================
-    */
-
-    async function disconnect() {
-
-        const bluetooth =
-            getBluetooth();
-
-
-        if (
-            bluetooth &&
-            typeof bluetooth.disconnect ===
-            "function"
-        ) {
-
-            try {
-
-                await bluetooth.disconnect();
-
-            }
-
-            catch (err) {
-
-                warn(
-                    "Disconnect error:",
-                    err
-                );
-
-            }
-
-        }
-
-
-        connected =
-            false;
-
-
-        currentPrinter =
-            null;
-
-
-        dispatch(
-            "disconnected"
-        );
-
-
-        return true;
-
-    }
-
-
-    /*
-    ======================================================
-     CONNECTION STATUS
-    ======================================================
-    */
-
-    function isConnected() {
-
-        const bluetooth =
-            getBluetooth();
-
-
-        if (
-            bluetooth &&
-            typeof bluetooth.isConnected ===
-            "function"
-        ) {
-
-            try {
-
-                return Boolean(
-                    bluetooth.isConnected()
-                );
-
-            }
-
-            catch (e) {}
-
-        }
-
-
-        return connected;
-
-    }
-
-
-    /*
-    ======================================================
-     PRINTER INFO
-    ======================================================
-    */
-
-    function getPrinterInfo() {
-
-        const bluetooth =
-            getBluetooth();
-
-
-        let info =
-            null;
-
-
-        if (
-            bluetooth &&
-            typeof bluetooth.getInfo ===
-            "function"
-        ) {
-
-            try {
-
-                info =
-                    bluetooth.getInfo();
-
-            }
-
-            catch (e) {}
-
-        }
+        updateConnectionInfo();
 
 
         return {
@@ -1930,14 +1378,35 @@
             connected:
                 isConnected(),
 
+            connecting:
+                state.connecting,
+
+            status:
+                state.status,
+
             language:
-                getPrinterLanguage(),
+                state.language,
 
-            paper:
-                getPaperInfo(),
+            paperWidth:
+                state.paperWidth,
 
-            bluetooth:
-                info
+            paperHeight:
+                state.paperHeight,
+
+            dpi:
+                state.dpi,
+
+            deviceName:
+                state.deviceName,
+
+            connectionType:
+                state.connectionType,
+
+            transparentBackground:
+                state.transparentBackground,
+
+            lastError:
+                state.lastError
 
         };
 
@@ -1945,297 +1414,101 @@
 
 
     /*
-    ======================================================
-     SEND RAW
-    ======================================================
+    =================================================
+     GET INFO
+    =================================================
     */
 
-    async function sendRaw(
-        data
-    ) {
+    function getInfo() {
 
-        const bytes =
-            normalizeBytes(
-                data
-            );
+        const status =
+            getStatus();
 
 
-        if (
-            bytes.length === 0
-        ) {
-
-            warn(
-                "sendRaw(): data kosong."
-            );
-
-
-            return false;
-
-        }
-
-
-        const bluetooth =
-            getBluetooth();
+        let bluetoothInfo =
+            null;
 
 
         if (
-            !bluetooth
-        ) {
-
-            throw new Error(
-                "SmartPrint Bluetooth Engine tidak ditemukan."
-            );
-
-        }
-
-
-        if (
-            typeof bluetooth.sendRaw !==
+            typeof window !== "undefined" &&
+            window.Bluetooth &&
+            typeof Bluetooth.getInfo ===
             "function"
         ) {
 
-            throw new Error(
-                "Bluetooth.sendRaw() tidak tersedia."
-            );
+            try {
+
+                bluetoothInfo =
+                    Bluetooth.getInfo();
+
+            }
+
+            catch (err) {}
 
         }
 
 
-        /*
-         * Jangan otomatis connect di sini.
-         *
-         * sendRaw harus bekerja pada koneksi
-         * yang sudah dibuat oleh user / app.
-         */
+        return {
 
-        if (
-            typeof bluetooth.isConnected ===
-            "function" &&
-            !bluetooth.isConnected()
-        ) {
+            version:
+                VERSION,
 
-            throw new Error(
-                "Printer belum terhubung."
-            );
+            ...status,
 
-        }
+            bluetooth:
+                bluetoothInfo
 
-
-        return await bluetooth.sendRaw(
-            bytes
-        );
+        };
 
     }
 
 
     /*
-    ======================================================
-     EVENT
-    ======================================================
+    =================================================
+     GET STATE
+    =================================================
     */
 
-    function dispatch(
-        name,
-        detail
-    ) {
+    function getState() {
 
-        try {
+        return {
 
-            window.dispatchEvent(
-                new CustomEvent(
-                    "smartprint-printer-" +
-                    name,
-                    {
-                        detail:
-                            detail || {}
-                    }
-                )
-            );
+            ...state
 
-        }
-
-        catch (e) {}
+        };
 
     }
 
 
     /*
-    ======================================================
-     BLUETOOTH EVENTS
-    ======================================================
+    =================================================
+     SYNC SETTINGS
+    =================================================
     */
 
-    function attachBluetoothEvents() {
+    function syncSettings() {
 
-        if (
-            typeof window ===
-            "undefined"
-        ) {
-
-            return;
-
-        }
-
-
-        window.addEventListener(
-            "smartprint-bluetooth-connected",
-            event => {
-
-                connected =
-                    true;
-
-
-                currentPrinter =
-                    event.detail ||
-                    null;
-
-
-                dispatch(
-                    "connected",
-                    event.detail
-                );
-
-            }
-        );
-
-
-        window.addEventListener(
-            "smartprint-bluetooth-disconnected",
-            event => {
-
-                connected =
-                    false;
-
-
-                currentPrinter =
-                    null;
-
-
-                dispatch(
-                    "disconnected",
-                    event.detail
-                );
-
-            }
-        );
-
-
-        window.addEventListener(
-            "smartprint-bluetooth-connecting",
-            event => {
-
-                dispatch(
-                    "connecting",
-                    event.detail
-                );
-
-            }
-        );
-
-
-        window.addEventListener(
-            "smartprint-bluetooth-data",
-            event => {
-
-                dispatch(
-                    "data",
-                    event.detail
-                );
-
-            }
-        );
-
-
-        window.addEventListener(
-            "smartprint-bluetooth-status",
-            event => {
-
-                if (
-                    event.detail &&
-                    "connected" in
-                    event.detail
-                ) {
-
-                    connected =
-                        Boolean(
-                            event.detail.connected
-                        );
-
-                }
-
-
-                dispatch(
-                    "status",
-                    event.detail
-                );
-
-            }
-        );
-
-    }
-
-
-    /*
-    ======================================================
-     INITIALIZE
-    ======================================================
-    */
-
-    async function init() {
-
-        if (
-            initialized
-        ) {
-
-            return true;
-
-        }
-
-
-        log(
-            "========================================"
-        );
-
-
-        log(
-            "SmartPrint Printer Manager v" +
-            VERSION
-        );
-
-
-        log(
-            "========================================"
-        );
-
-
-        const settings =
-            getSettings();
-
-
-        currentLanguage =
-            normalizeLanguage(
-                settings.printLanguage
-            );
+        readSettings();
 
 
         log(
             "Printer Language:",
-            currentLanguage
+            state.language
         );
 
 
         log(
             "Paper:",
-            settings.labelWidth,
-            "x",
-            settings.labelHeight,
-            "mm"
+            state.paperWidth +
+            " x " +
+            state.paperHeight +
+            " mm"
         );
 
 
         log(
             "DPI:",
-            settings.dpi
+            state.dpi
         );
 
 
@@ -2245,35 +1518,293 @@
 
 
         log(
-            "YES - background tidak dikirim"
+            state.transparentBackground
+                ? "YES - background tidak dikirim"
+                : "NO"
         );
 
 
-        attachBluetoothEvents();
+        return getState();
+
+    }
 
 
-        initialized =
+    /*
+    =================================================
+     HANDLE BLUETOOTH CONNECTED
+    =================================================
+    */
+
+    function handleBluetoothConnected(
+        event
+    ) {
+
+        state.connected =
             true;
 
 
+        state.connecting =
+            false;
+
+
+        state.status =
+            "connected";
+
+
+        updateConnectionInfo();
+
+
+        const info =
+            event &&
+            event.detail
+                ? event.detail
+                : {};
+
+
+        log(
+            "========================================"
+        );
+
+
+        log(
+            "PRINTER CONNECTED"
+        );
+
+
+        log(
+            "Device:",
+            state.deviceName ||
+            (
+                info.device &&
+                info.device.name
+            ) ||
+            "(unknown)"
+        );
+
+
+        log(
+            "Connection:",
+            state.connectionType ||
+            "BLE"
+        );
+
+
+        log(
+            "Status: READY"
+        );
+
+
+        log(
+            "========================================"
+        );
+
+
+        dispatch(
+            "connected",
+            {
+                info:
+                    getInfo()
+            }
+        );
+
+    }
+
+
+    /*
+    =================================================
+     HANDLE BLUETOOTH CONNECTING
+    =================================================
+    */
+
+    function handleBluetoothConnecting() {
+
+        state.connecting =
+            true;
+
+
+        state.status =
+            "connecting";
+
+
+        dispatch(
+            "connecting"
+        );
+
+    }
+
+
+    /*
+    =================================================
+     HANDLE BLUETOOTH DISCONNECTED
+    =================================================
+    */
+
+    function handleBluetoothDisconnected() {
+
+        state.connected =
+            false;
+
+
+        state.connecting =
+            false;
+
+
+        state.status =
+            "disconnected";
+
+
+        state.deviceName =
+            "";
+
+
+        state.connectionType =
+            null;
+
+
+        log(
+            "Printer Disconnected"
+        );
+
+
+        dispatch(
+            "disconnected"
+        );
+
+    }
+
+
+    /*
+    =================================================
+     HANDLE BLUETOOTH STATUS
+    =================================================
+    */
+
+    function handleBluetoothStatus() {
+
+        updateConnectionInfo();
+
+
+        dispatch(
+            "status"
+        );
+
+    }
+
+
+    /*
+    =================================================
+     INITIALIZE
+    =================================================
+    */
+
+    function init() {
+
+        if (
+            state.initialized
+        ) {
+
+            return true;
+
+        }
+
+
+        syncSettings();
+
+
         /*
-         * Auto connect tidak membuka picker.
+         * Bluetooth events.
+         */
+
+        window.addEventListener(
+            "smartprint-bluetooth-connected",
+            handleBluetoothConnected
+        );
+
+
+        window.addEventListener(
+            "smartprint-bluetooth-connecting",
+            handleBluetoothConnecting
+        );
+
+
+        window.addEventListener(
+            "smartprint-bluetooth-disconnected",
+            handleBluetoothDisconnected
+        );
+
+
+        window.addEventListener(
+            "smartprint-bluetooth-status",
+            handleBluetoothStatus
+        );
+
+
+        /*
+         * Jika Bluetooth sudah connected
+         * sebelum Printer init.
          */
 
         setTimeout(
-            () => {
+            function () {
 
-                autoConnect()
-                    .catch(
-                        err =>
-                            warn(
-                                "AutoConnect:",
-                                err
-                            )
-                    );
+                updateConnectionInfo();
 
             },
             100
+        );
+
+
+        state.initialized =
+            true;
+
+
+        log(
+            "========================================"
+        );
+
+
+        log(
+            "SmartPrint Printer Manager v" +
+            VERSION +
+            " Ready"
+        );
+
+
+        log(
+            "========================================"
+        );
+
+
+        log(
+            "Printer Language:",
+            state.language
+        );
+
+
+        log(
+            "Paper:",
+            state.paperWidth +
+            " x " +
+            state.paperHeight +
+            " mm"
+        );
+
+
+        log(
+            "DPI:",
+            state.dpi
+        );
+
+
+        log(
+            "Transparent background:"
+        );
+
+
+        log(
+            state.transparentBackground
+                ? "YES - background tidak dikirim"
+                : "NO"
         );
 
 
@@ -2288,9 +1819,9 @@
 
 
     /*
-    ======================================================
-     PUBLIC BASIC API
-    ======================================================
+    =================================================
+     PUBLIC API
+    =================================================
     */
 
     const Printer = {
@@ -2298,56 +1829,54 @@
         version:
             VERSION,
 
+        state,
+
         init,
 
         connect,
 
-        connectNew,
-
-        autoConnect,
+        connectBluetooth,
 
         disconnect,
 
         isConnected,
 
-        sendRaw,
+        setLanguage,
 
-        getSettings,
+        getLanguage,
 
-        updateSettings,
+        setPaperSize,
 
         getPaperSize,
 
-        getPaperDots,
+        print,
 
-        getPaperInfo,
+        printRaw,
 
-        getPrinterLanguage,
+        sendRaw,
 
-        setPrinterLanguage,
+        writeRaw,
 
-        getPrinterInfo,
+        testPrint,
 
-        mmToDots,
+        getStatus,
 
-        dotsToMm,
+        getInfo,
 
-        objectToDots
+        getState,
+
+        syncSettings
 
     };
 
 
     /*
-    ======================================================
+    =================================================
      GLOBAL
-    ======================================================
+    =================================================
     */
 
     window.Printer =
-        Printer;
-
-
-    window.SmartPrintPrinter =
         Printer;
 
 
@@ -2355,10 +1884,14 @@
         Printer;
 
 
+    window.SmartPrintPrinter =
+        Printer;
+
+
     /*
-    ======================================================
-     READY LOG
-    ======================================================
+    =================================================
+     READY
+    =================================================
     */
 
     console.log(
@@ -2379,10 +1912,24 @@
 
 
     /*
-    ======================================================
+    =================================================
      DOM READY
-    ======================================================
+    =================================================
     */
+
+    function start() {
+
+        setTimeout(
+            function () {
+
+                Printer.init();
+
+            },
+            100
+        );
+
+    }
+
 
     if (
         document.readyState ===
@@ -2391,18 +1938,7 @@
 
         document.addEventListener(
             "DOMContentLoaded",
-            () => {
-
-                setTimeout(
-                    () => {
-
-                        Printer.init();
-
-                    },
-                    150
-                );
-
-            },
+            start,
             {
                 once:
                     true
@@ -2413,14 +1949,7 @@
 
     else {
 
-        setTimeout(
-            () => {
-
-                Printer.init();
-
-            },
-            150
-        );
+        start();
 
     }
 
