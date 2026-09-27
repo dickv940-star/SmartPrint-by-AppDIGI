@@ -1,7 +1,7 @@
 /*
 =========================================================
 SmartPrint by AppDIGI
-Preview Engine v5.0
+Preview Engine v5.1
 =========================================================
 
 FEATURES
@@ -32,7 +32,7 @@ FEATURES
 
 "use strict";
 
-console.log("Preview Engine v5.0 Loaded");
+console.log("Preview Engine v5.1 Loaded");
 
 
 const Preview = {
@@ -211,7 +211,7 @@ const Preview = {
 
 
         console.log(
-            "Preview Engine v5.0 Ready"
+            "Preview Engine v5.1 Ready"
         );
 
     },
@@ -340,6 +340,7 @@ const Preview = {
             "pointerdown",
             (e) => {
 
+                if (window.LabelEditor && LabelEditor.enabled) return;
                 if (!this.image)
                     return;
 
@@ -414,6 +415,7 @@ const Preview = {
             "pointermove",
             (e) => {
 
+                if (window.LabelEditor && LabelEditor.enabled) return;
                 if (!this.dragging)
                     return;
 
@@ -1051,121 +1053,42 @@ const Preview = {
     // RENDER
     // =================================================
 
-    render() {
+    render(options = {}) {
 
-        if (!this.ctx)
-            return;
-
-
-        // ---------------------------------------------
-        // CLEAR
-        // ---------------------------------------------
+        if (!this.ctx) return;
 
         this.clear();
 
+        /* The label surface itself is the 799×1199 print raster. */
+        this.ctx.fillStyle = "#ffffff";
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // ---------------------------------------------
-        // NO IMAGE
-        // ---------------------------------------------
+        if (this.image) {
+            const iw = this.getImageWidth();
+            const ih = this.getImageHeight();
 
-        if (!this.image)
-            return;
-
-
-        const iw =
-            this.getImageWidth();
-
-
-        const ih =
-            this.getImageHeight();
-
-
-        if (
-            !iw ||
-            !ih
-        ) {
-
-            return;
-
+            if (iw && ih) {
+                this.ctx.save();
+                this.ctx.translate(
+                    (this.canvas.width / 2) + this.posX,
+                    (this.canvas.height / 2) + this.posY
+                );
+                this.ctx.rotate(this.rotation * Math.PI / 180);
+                this.ctx.scale(this.scale, this.scale);
+                this.ctx.drawImage(this.image, -iw / 2, -ih / 2, iw, ih);
+                this.ctx.restore();
+            }
         }
 
-
-        // ---------------------------------------------
-        // SAVE
-        // ---------------------------------------------
-
-        this.ctx.save();
-
-
-        // ---------------------------------------------
-        // CENTER + POSITION
-        // ---------------------------------------------
-
-        this.ctx.translate(
-
-            (this.canvas.width / 2)
-            + this.posX,
-
-            (this.canvas.height / 2)
-            + this.posY
-
-        );
-
-
-        // ---------------------------------------------
-        // ROTATION
-        // ---------------------------------------------
-
-        this.ctx.rotate(
-
-            this.rotation *
-            Math.PI /
-            180
-
-        );
-
-
-        // ---------------------------------------------
-        // ZOOM
-        // ---------------------------------------------
-
-        this.ctx.scale(
-
-            this.scale,
-
-            this.scale
-
-        );
-
-
-        // ---------------------------------------------
-        // IMAGE
-        // ---------------------------------------------
-
-        this.ctx.drawImage(
-
-            this.image,
-
-            -iw / 2,
-
-            -ih / 2,
-
-            iw,
-
-            ih
-
-        );
-
-
-        // ---------------------------------------------
-        // RESTORE
-        // ---------------------------------------------
-
-        this.ctx.restore();
+        if (window.LabelEditor &&
+            typeof LabelEditor.renderObjects === "function") {
+            LabelEditor.renderObjects(
+                this.ctx,
+                { forPrint: !!options.forPrint }
+            );
+        }
 
     },
-
-
     // =================================================
     // ZOOM IN
     // =================================================
@@ -1731,5 +1654,5 @@ window.Preview =
 // =====================================================
 
 console.log(
-    "Preview Engine v5.0 Loaded"
+    "Preview Engine v5.1 Loaded"
 );
