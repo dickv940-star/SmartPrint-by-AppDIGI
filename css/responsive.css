@@ -577,3 +577,83 @@ button {
     }
 
 }
+
+
+/* SMARTPRINT UNIVERSAL RESPONSIVE v7.0 */
+html{width:100%;min-width:0;-webkit-text-size-adjust:100%}
+body{width:100%;min-width:0;overflow-x:hidden}
+img,video,svg{max-width:100%;height:auto}
+button,input,select,textarea{font:inherit;max-width:100%}
+
+.container{width:100%;max-width:1600px;margin:0 auto;grid-template-columns:clamp(150px,12vw,190px) minmax(0,1fr) clamp(220px,18vw,280px)}
+.workspace,.preview-card,.panel,.sidebar{min-width:0;max-width:100%}
+#preview{width:100%;max-width:100%;min-width:0;overflow:auto;-webkit-overflow-scrolling:touch}
+#preview canvas,#previewCanvas{flex:0 0 auto;max-width:none}
+.toolbar,.file-area{min-width:0;flex-wrap:wrap}
+.toolbar button{flex:0 0 auto}
+
+@media(max-width:1100px){
+ .container{grid-template-columns:155px minmax(0,1fr)}
+ .panel{grid-column:1/-1;position:static}
+ .preview-card{min-height:calc(100vh - 90px)}
+ #preview{max-height:calc(100vh - 230px)}
+}
+
+@media(max-width:800px){
+ .topbar{min-height:56px;padding:8px 12px}
+ .logo-area img{width:36px;height:36px}
+ .logo-area h1{font-size:17px}
+ .container{display:flex;flex-direction:column;width:100%;padding:10px;gap:10px}
+ .sidebar{order:1;position:static;width:100%;overflow-x:auto;overflow-y:hidden;padding:8px;flex-direction:row;flex-wrap:nowrap}
+ .sidebar .menu{width:auto;min-width:max-content;white-space:nowrap;text-align:center}
+ .workspace{order:2;width:100%}
+ .panel{order:3;width:100%}
+ #preview{min-height:55vh;max-height:70vh}
+ .bottom-nav{display:none}
+}
+
+@media(max-width:600px){
+ body{padding-bottom:64px}
+ .topbar{position:sticky;top:0;z-index:1000;min-height:52px;padding:7px 10px}
+ .logo-area{min-width:0}
+ .logo-area h1{font-size:15px;line-height:1.1}
+ .logo-area span{font-size:9px}
+ .status{max-width:48%;overflow:hidden;text-overflow:ellipsis;font-size:10px;padding:6px 8px}
+ .container{padding:7px;gap:8px}
+ .sidebar{display:none}
+ .preview-card,.panel{border-radius:10px;padding:10px}
+ .preview-card h2,.panel h2{font-size:16px}
+ .toolbar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+ .toolbar button{width:100%;min-width:0;min-height:40px;padding:6px 3px;font-size:11px}
+ #zoomValue{min-width:0;width:100%;min-height:40px}
+ #preview{width:100%;height:60vh;min-height:300px;max-height:680px;padding:12px}
+ .file-area{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+ #uploadBtn,#clearFileBtn{width:100%;min-height:42px;padding:0 8px;font-size:12px}
+ .panel select,.panel input[type=number],.panel input[type=text],.panel textarea{min-height:42px;font-size:14px}
+ .buttons{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+ .buttons button{min-height:46px;font-size:13px}
+ .label-editor-panel,.print-floating-panel,.smartprint-floating-panel{left:8px!important;right:8px!important;top:58px!important;width:auto!important;max-width:none!important;max-height:calc(100dvh - 70px)!important}
+ .label-editor-panel{padding:10px}
+ .le-grid{grid-template-columns:1fr 1fr}
+ .le-grid input,.le-grid select,.le-grid textarea{min-height:40px;font-size:13px}
+ .bottom-nav{position:fixed;left:0;right:0;bottom:0;z-index:11000;display:grid!important;grid-template-columns:repeat(5,1fr);height:58px;padding:5px 6px;gap:5px;background:rgba(255,255,255,.97);border-top:1px solid #dbe3ed;box-shadow:0 -4px 18px rgba(15,23,42,.10);backdrop-filter:blur(8px)}
+ .bottom-nav button{min-width:0;min-height:46px;border:0;border-radius:8px;background:transparent;font-size:20px;cursor:pointer;touch-action:manipulation}
+ .bottom-nav button:active{transform:scale(.94);background:#eff6ff}
+}
+
+@media(max-width:380px){
+ .toolbar{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .buttons{grid-template-columns:1fr}
+ #preview{min-height:280px;height:56vh}
+ .le-grid{grid-template-columns:1fr}
+}
+
+@media(max-width:900px) and (orientation:landscape){
+ #preview{height:68vh;max-height:none}
+ .label-editor-panel,.print-floating-panel,.smartprint-floating-panel{max-height:calc(100dvh - 66px)!important}
+}
+
+@media(pointer:coarse){
+ button,select,input,textarea{touch-action:manipulation}
+ #preview canvas,#previewCanvas{touch-action:none}
+}
