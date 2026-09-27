@@ -222,6 +222,29 @@ const LabelEditor={
             host.remove();
         } catch(e) { originalQR.call(this,ctx,o); }
     };
+
+    const originalEnsure = LabelEditor.ensure;
+    LabelEditor.ensure = function () {
+        if (!window.Settings) return;
+        const s = Settings.getAll();
+        const patch = {
+            printerType: "label",
+            printLanguage: "TSPL"
+        };
+        if (!Number(s.paperWidth)) patch.paperWidth = 100;
+        if (!Number(s.paperHeight)) patch.paperHeight = 150;
+        if (!Number(s.labelWidth)) patch.labelWidth = patch.paperWidth || 100;
+        if (!Number(s.labelHeight)) patch.labelHeight = patch.paperHeight || 150;
+        if (!Number(s.dpi)) patch.dpi = 203;
+        if (s.gap === undefined) patch.gap = 2;
+        if (s.marginLeft === undefined) patch.marginLeft = 0;
+        if (s.marginTop === undefined) patch.marginTop = 0;
+        if (s.marginRight === undefined) patch.marginRight = 0;
+        if (s.marginBottom === undefined) patch.marginBottom = 0;
+        Settings.set(patch);
+        this.syncSize();
+    };
+
 })();
 
 window.LabelEditor=LabelEditor;
