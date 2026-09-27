@@ -99,6 +99,107 @@ class SmartPrint {
 
 
     // ==========================================
+    // NAVIGATION
+    // ==========================================
+
+    bindNavigation() {
+
+        const activate = (id) => {
+            document.querySelectorAll(".sidebar .menu").forEach(btn => {
+                btn.classList.toggle("active", btn.id === id);
+            });
+        };
+
+        const closeEditor = () => {
+            if (window.LabelEditor && typeof LabelEditor.close === "function") {
+                LabelEditor.close();
+            }
+        };
+
+        const home = document.getElementById("homeBtn");
+        if (home) {
+            home.addEventListener("click", () => {
+                activate("homeBtn");
+                closeEditor();
+                window.scrollTo({ top: 0, behavior: "smooth" });
+            });
+        }
+
+        const file = document.getElementById("fileBtn");
+        if (file) {
+            file.addEventListener("click", () => {
+                activate("fileBtn");
+                closeEditor();
+                const input = document.getElementById("fileInput");
+                if (input) input.click();
+            });
+        }
+
+        const label = document.getElementById("labelBtn");
+        if (label) {
+            label.addEventListener("click", () => {
+                activate("labelBtn");
+                if (window.LabelEditor && typeof LabelEditor.open === "function") {
+                    LabelEditor.open();
+                }
+            });
+        }
+
+        const barcode = document.getElementById("barcodeBtn");
+        if (barcode) {
+            barcode.addEventListener("click", () => {
+                activate("barcodeBtn");
+                if (window.LabelEditor && typeof LabelEditor.open === "function") {
+                    LabelEditor.open();
+                    LabelEditor.addBarcode();
+                }
+            });
+        }
+
+        const qr = document.getElementById("qrBtn");
+        if (qr) {
+            qr.addEventListener("click", () => {
+                activate("qrBtn");
+                if (window.LabelEditor && typeof LabelEditor.open === "function") {
+                    LabelEditor.open();
+                    LabelEditor.addQR();
+                }
+            });
+        }
+
+        const settings = document.getElementById("settingBtn");
+        if (settings) {
+            settings.addEventListener("click", () => {
+                activate("settingBtn");
+                closeEditor();
+                const panel = document.querySelector(".panel");
+                if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+            });
+        }
+
+        const mobile = {
+            navHome: "homeBtn",
+            navFile: "fileBtn",
+            navLabel: "labelBtn",
+            navQR: "qrBtn",
+            navSetting: "settingBtn"
+        };
+
+        Object.keys(mobile).forEach(navId => {
+            const nav = document.getElementById(navId);
+            const targetId = mobile[navId];
+            if (nav) {
+                nav.addEventListener("click", () => {
+                    const target = document.getElementById(targetId);
+                    if (target) target.click();
+                });
+            }
+        });
+
+    }
+
+
+    // ==========================================
     // PRINTER BUTTONS
     // ==========================================
 
