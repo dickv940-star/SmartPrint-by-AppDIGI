@@ -117,7 +117,7 @@ class SmartPrint {
                        the COM permission request. */
                     try {
                         const result =
-                            await Printer.connectSerial({ baudRate: 9600 });
+                            await Printer.connectSerialAuto({ baudRate: 9600 });
 
                         if (result) {
                             this.showToast("Bluetooth COM Connected");
