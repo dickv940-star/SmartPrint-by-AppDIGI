@@ -2639,6 +2639,14 @@
 
         }
 
+        dispatch("disconnected", {
+            type: "SERIAL"
+        });
+
+        dispatch("status", {
+            connected: false,
+            type: null
+        });
 
         return true;
 
