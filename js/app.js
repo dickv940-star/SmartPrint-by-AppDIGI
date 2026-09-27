@@ -105,45 +105,50 @@ class SmartPrint {
                 "connectBtn"
             );
 
-
         if (connect) {
 
             connect.addEventListener(
                 "click",
                 async () => {
 
+                    /* IMPORTANT: requestPort() must run directly
+                       from this user click. Do not open BLE picker
+                       before Web Serial or the browser will reject
+                       the COM permission request. */
                     try {
-
                         const result =
-                            await Printer.connect();
-
+                            await Printer.connectSerial({ baudRate: 9600 });
 
                         if (result) {
-
-                            this.showToast(
-                                "Printer Connected"
-                            );
-
+                            this.showToast("Bluetooth COM Connected");
+                        } else {
+                            this.showToast("COM printer tidak dipilih");
                         }
-
+                    } catch (e) {
+                        console.error("Bluetooth COM Connect Error", e);
+                        this.showToast("Gagal menghubungkan COM printer");
                     }
-
-                    catch (e) {
-
-                        console.error(
-                            "Printer Connect Error",
-                            e
-                        );
-
-                        this.showToast(
-                            "Printer gagal dihubungkan"
-                        );
-
-                    }
-
                 }
             );
+        }
 
+        const connectBLE =
+            document.getElementById("connectBLEBtn");
+
+        if (connectBLE) {
+            connectBLE.addEventListener(
+                "click",
+                async () => {
+                    try {
+                        const result = await Printer.connect();
+                        if (result) this.showToast("BLE Printer Connected");
+                        else this.showToast("BLE printer tidak terhubung");
+                    } catch (e) {
+                        console.error("BLE Connect Error", e);
+                        this.showToast("Gagal menghubungkan BLE printer");
+                    }
+                }
+            );
         }
 
 
