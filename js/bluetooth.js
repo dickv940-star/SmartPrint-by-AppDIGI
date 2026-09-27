@@ -37,7 +37,7 @@
 
     "use strict";
 
-    const VERSION = "6.2.0";
+    const VERSION = "6.3.0";
 
     let device = null;
     let server = null;
@@ -1853,6 +1853,93 @@
     =====================================================
     */
 
+    async function connectSerialAuto(options) {
+
+        options = options || {};
+        const baudRate = Number(options.baudRate) || 9600;
+
+        if (!isSerialSupported()) {
+            throw new Error("Web Serial tidak didukung browser.");
+        }
+
+        /*
+         * Jika browser sudah pernah memberi izin, getPorts()
+         * dapat mengembalikan port tanpa membuka picker.
+         * SmartPrint menyimpan pilihan port terakhir agar pada
+         * pemakaian berikutnya printer dapat tersambung langsung.
+         */
+        try {
+            const ports = await navigator.serial.getPorts();
+
+            if (ports && ports.length) {
+                let selectedIndex = -1;
+
+                try {
+                    selectedIndex = Number(
+                        localStorage.getItem("SMARTPRINT_SERIAL_PORT_INDEX")
+                    );
+                } catch (e) {}
+
+                if (
+                    Number.isInteger(selectedIndex) &&
+                    selectedIndex >= 0 &&
+                    selectedIndex < ports.length
+                ) {
+                    serialPort = ports[selectedIndex];
+                } else if (ports.length === 1) {
+                    serialPort = ports[0];
+                }
+            }
+
+            if (serialPort) {
+                try {
+                    if (!serialPort.readable && !serialPort.writable) {
+                        await serialPort.open({
+                            baudRate: baudRate,
+                            dataBits: Number(options.dataBits) || 8,
+                            stopBits: Number(options.stopBits) || 1,
+                            parity: options.parity || "none",
+                            flowControl: options.flowControl || "none"
+                        });
+                    }
+
+                    const info = serialPort.getInfo
+                        ? serialPort.getInfo()
+                        : {};
+
+                    log("SAVED SERIAL PRINTER CONNECTED", info);
+
+                    dispatch("connected", {
+                        type: "SERIAL",
+                        port: serialPort,
+                        info: info,
+                        baudRate: baudRate,
+                        remembered: true
+                    });
+
+                    dispatch("status", {
+                        connected: true,
+                        type: "SERIAL",
+                        port: serialPort,
+                        info: info,
+                        baudRate: baudRate,
+                        remembered: true
+                    });
+
+                    return true;
+                } catch (e) {
+                    warn("Saved COM gagal dibuka, buka picker:", e);
+                    try { serialPort = null; } catch (_) {}
+                }
+            }
+        } catch (e) {
+            warn("getPorts() gagal:", e);
+        }
+
+        return connectSerial(options);
+    }
+
+
     async function connectSerial(options) {
 
         if (!isSerialSupported()) {
@@ -3571,6 +3658,7 @@
         autoConnect: autoConnect,
 
         connectSerial: connectSerial,
+        connectSerialAuto: connectSerialAuto,
         connectCOM: connectSerial,
         connectBluetoothCOM: connectSerial,
 
