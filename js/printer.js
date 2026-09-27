@@ -104,6 +104,9 @@
         transparentBackground:
             DEFAULTS.transparentBackground,
 
+        copies:
+            DEFAULTS.copies,
+
         device: null,
 
         server: null,
@@ -333,6 +336,13 @@
                 settings.transparentBackground;
 
         }
+
+        state.copies = Math.max(
+            1,
+            Math.floor(
+                Number(settings.copies) || DEFAULTS.copies
+            )
+        );
 
 
         log(
