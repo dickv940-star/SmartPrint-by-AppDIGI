@@ -91,6 +91,8 @@ class SmartPrint {
 
         this.bindSettings();
 
+        this.bindNavigation();
+
         this.bindDragDrop();
 
     }
@@ -477,7 +479,7 @@ class SmartPrint {
 
         const rotateLeft =
             document.getElementById(
-                "rotateLeft"
+                "rotateLeftBtn"
             );
 
 
@@ -502,7 +504,7 @@ class SmartPrint {
 
         const rotateRight =
             document.getElementById(
-                "rotateRight"
+                "rotateRightBtn"
             );
 
 
@@ -527,7 +529,7 @@ class SmartPrint {
 
         const reset =
             document.getElementById(
-                "resetPreview"
+                "resetPreviewBtn"
             );
 
 
@@ -658,10 +660,7 @@ class SmartPrint {
 
         if (mode) {
 
-            mode.value =
-                Settings.get(
-                    "printLanguage"
-                ) || "ESC";
+            mode.value = (String(Settings.get("printLanguage") || "ESC").toUpperCase() === "TSPL") ? "tspl" : "escpos";
 
 
             mode.addEventListener(
@@ -670,7 +669,7 @@ class SmartPrint {
 
                     Settings.set(
                         "printLanguage",
-                        mode.value
+                        mode.value === "tspl" ? "TSPL" : "ESC"
                     );
 
 
@@ -820,6 +819,35 @@ class SmartPrint {
 
         }
 
+
+        // ======================================
+        // PRINTER CLASS
+        // ======================================
+
+        const printerType = document.getElementById("printerType");
+        if (printerType) {
+            const savedType = Settings.get("printerType", "label");
+            printerType.value = savedType;
+            printerType.addEventListener("change", () => {
+                Settings.set("printerType", printerType.value);
+                const modeEl = document.getElementById("printMode");
+                const paperEl = document.getElementById("paperSize");
+                if (printerType.value === "label") {
+                    if (modeEl) modeEl.value = "tspl";
+                    if (paperEl) paperEl.value = "100x150";
+                    Settings.set({
+                        printLanguage: "TSPL",
+                        paperWidth: 100,
+                        paperHeight: 150,
+                        labelWidth: 100,
+                        labelHeight: 150,
+                        canvasWidth: 799,
+                        canvasHeight: 1199
+                    });
+                }
+                this.showToast(printerType.value === "label" ? "Mode TSPL • Label 100×150" : "Printer receipt dipilih");
+            });
+        }
 
         // ======================================
         // DENSITY
