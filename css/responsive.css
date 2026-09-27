@@ -136,7 +136,7 @@ Hanya file input utama yang ditampilkan.
 
 #fileInput {
 
-    display: block;
+    display: none;
 
     width: 100%;
 
