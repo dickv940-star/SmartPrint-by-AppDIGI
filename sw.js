@@ -9,7 +9,7 @@
 "use strict";
 
 
-const CACHE_NAME = "smartprint-v6.7";
+const CACHE_NAME = "smartprint-v6.8";
 
 
 const APP_FILES = [
@@ -27,6 +27,7 @@ const APP_FILES = [
     "./js/image.js",
     "./js/pdf.js",
     "./js/barcode.js",
+    "./js/barcode-pro.js",
     "./js/qrcode.js",
     "./js/label.js",
     "./js/bluetooth.js",
