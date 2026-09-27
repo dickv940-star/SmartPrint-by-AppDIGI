@@ -913,6 +913,89 @@
 
 
         /*
+        ------------------------------------------------
+        RASTER CLEANUP
+        ------------------------------------------------
+
+        Sedikit pelebaran 1-dot dipakai untuk menutup
+        garis hitam yang terputus karena anti-aliasing,
+        tetapi hanya pada pixel yang benar-benar dekat
+        dengan area hitam.
+
+        Mode:
+        0 = OFF
+        1 = LIGHT (default)
+        2 = STRONG
+        ------------------------------------------------
+        */
+
+        const cleanupMode =
+            Math.max(
+                0,
+                Math.min(
+                    2,
+                    Math.floor(
+                        Number(
+                            config.rasterCleanup ?? 1
+                        )
+                    )
+                )
+            );
+
+        const cleanupRadius =
+            cleanupMode === 2 ? 2 :
+            cleanupMode === 1 ? 1 :
+            0;
+
+        function isSourceBlack(x, y) {
+
+            if (
+                x < 0 ||
+                y < 0 ||
+                x >= width ||
+                y >= height
+            ) {
+                return false;
+            }
+
+            const index =
+                (y * width + x) * 4;
+
+            return pixelToBlack(
+                pixels[index],
+                pixels[index + 1],
+                pixels[index + 2],
+                pixels[index + 3],
+                config.threshold
+            );
+        }
+
+        function shouldCleanupPixel(x, y) {
+
+            if (cleanupRadius === 0) {
+                return false;
+            }
+
+            /* Jangan memenuhi background putih hanya karena
+               satu pixel hitam jauh di sekitarnya. */
+            for (let dy = -cleanupRadius; dy <= cleanupRadius; dy++) {
+                for (let dx = -cleanupRadius; dx <= cleanupRadius; dx++) {
+
+                    if (dx === 0 && dy === 0) {
+                        continue;
+                    }
+
+                    if (isSourceBlack(x + dx, y + dy)) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+
+        /*
         =================================================
         RASTER LOOP
         =================================================
@@ -984,7 +1067,7 @@
                     ];
 
 
-                const black =
+                let black =
                     pixelToBlack(
                         r,
                         g,
@@ -992,6 +1075,19 @@
                         a,
                         config.threshold
                     );
+
+
+                /*
+                Anti-aliasing cleanup:
+                pixel putih/abu yang sangat dekat dengan
+                tinta hitam ikut diisi agar garis tidak putus.
+                */
+                if (
+                    !black &&
+                    shouldCleanupPixel(x, y)
+                ) {
+                    black = true;
+                }
 
 
                 if (!black) {
