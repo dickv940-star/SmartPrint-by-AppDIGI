@@ -45,9 +45,10 @@
     function checksumEAN(digits) {
         const body = digits.slice(0, -1);
         let sum = 0;
-        for (let i = 0; i < body.length; i++) {
-            const n = Number(body[i]);
-            sum += ((body.length - i) % 2 === 0) ? n * 3 : n;
+        let weight = 3;
+        for (let i = body.length - 1; i >= 0; i--) {
+            sum += Number(body[i]) * weight;
+            weight = weight === 3 ? 1 : 3;
         }
         return (10 - (sum % 10)) % 10;
     }
