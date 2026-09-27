@@ -56,6 +56,9 @@ const BarcodeEngine = {
 
     bindUI() {
 
+        /* Label Editor owns barcode insertion. */
+        return;
+
         const button =
             document.getElementById("barcodeBtn");
 
