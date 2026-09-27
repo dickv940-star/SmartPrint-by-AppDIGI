@@ -955,8 +955,23 @@ class SmartPrint {
                     );
 
 
-                    const connected =
-                        await Printer.connect();
+                    /* Printer Bluetooth Classic memakai Web Serial.
+                       requestPort() harus tetap berada di jalur langsung
+                       dari klik tombol Print agar user activation browser
+                       tidak hilang. */
+                    let connected = false;
+
+                    if (
+                        typeof Printer.connectSerial === "function"
+                    ) {
+                        connected =
+                            await Printer.connectSerial({
+                                baudRate: 9600
+                            });
+                    } else {
+                        connected =
+                            await Printer.connect();
+                    }
 
 
                     if (!connected) {
@@ -1231,7 +1246,7 @@ class SmartPrint {
             () => {
 
                 navigator.serviceWorker
-                    .register("sw.js?v=6.2.0")
+                    .register("sw.js?v=6.3.0")
 
                     .then(
                         reg => {
