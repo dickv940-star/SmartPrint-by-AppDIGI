@@ -934,14 +934,14 @@ class SmartPrint {
 
         try {
 
-            if (!this.file) {
+            const hasLabelObjects =
+                window.LabelEditor &&
+                Array.isArray(LabelEditor.objects) &&
+                LabelEditor.objects.length > 0;
 
-                alert(
-                    "Silakan pilih gambar atau PDF terlebih dahulu."
-                );
-
+            if (!this.file && !hasLabelObjects) {
+                alert("Tambahkan objek label atau pilih gambar/PDF terlebih dahulu.");
                 return;
-
             }
 
 
@@ -1320,7 +1320,7 @@ class SmartPrint {
             () => {
 
                 navigator.serviceWorker
-                    .register("sw.js?v=6.3.0")
+                    .register("sw.js?v=6.6.0")
 
                     .then(
                         reg => {
