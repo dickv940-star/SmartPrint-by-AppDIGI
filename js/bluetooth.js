@@ -1992,7 +1992,29 @@
                 ? serialPort.getInfo()
                 : {};
 
-            log("COM PORT TERPILIH:", info);
+            log("PRINTER COM TERPILIH:", info);
+
+            /*
+             * Simpan posisi port yang dipilih. Pada koneksi berikutnya
+             * connectSerialAuto() akan mencoba port ini tanpa picker.
+             */
+            try {
+                const grantedPorts = await navigator.serial.getPorts();
+                const selectedIndex = grantedPorts.indexOf(serialPort);
+
+                if (selectedIndex >= 0) {
+                    localStorage.setItem(
+                        "SMARTPRINT_SERIAL_PORT_INDEX",
+                        String(selectedIndex)
+                    );
+                    log(
+                        "Printer tersimpan untuk koneksi otomatis. Index:",
+                        selectedIndex
+                    );
+                }
+            } catch (e) {
+                warn("Gagal menyimpan port printer:", e);
+            }
 
             await serialPort.open({
 
