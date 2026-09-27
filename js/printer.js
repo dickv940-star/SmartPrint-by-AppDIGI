@@ -32,7 +32,7 @@
        GLOBAL
        ===================================================== */
 
-    const VERSION = "4.3.0";
+    const VERSION = "4.4.0";
 
     const LOG_PREFIX = "[SmartPrint Printer]";
 
@@ -1194,9 +1194,22 @@
             }
 
             if (!result) {
-                state.connected = false;
-                state.connecting = false;
-                return false;
+
+                log("BLE printer tidak terhubung.");
+                log("Mencoba Bluetooth Classic / COM via Web Serial...");
+
+                if (typeof Bluetooth.connectSerial === "function") {
+                    result = await Bluetooth.connectSerial({
+                        baudRate: 9600
+                    });
+                }
+
+                if (!result) {
+                    state.connected = false;
+                    state.connecting = false;
+                    state.lastError = "BLE tidak terhubung dan COM/Serial juga belum dipilih.";
+                    return false;
+                }
             }
 
             if (!syncFromBluetooth()) {
@@ -2580,5 +2593,5 @@
 
 
 /* =========================================================
-   END SMARTPRINT PRINTER MANAGER v4.3.0
+   END SMARTPRINT PRINTER MANAGER v4.4.0
    ========================================================= */
