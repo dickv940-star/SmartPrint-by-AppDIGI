@@ -1250,3 +1250,88 @@ body {
         min-height: 40px;
     }
 }
+
+
+/* =========================================================
+   SMARTPRINT PREVIEW BALANCE v7.4
+   Balance Preview header / toolbar / paper / file footer
+   so the white label sits naturally in the center.
+========================================================= */
+
+@media (min-width: 1101px) {
+
+    .container.paper-aligned .preview-card {
+        padding: 12px;
+        gap: 0;
+    }
+
+    .container.paper-aligned .preview-card h2 {
+        min-height: 30px;
+        height: 30px;
+        margin: 0 0 8px;
+        padding: 0 2px;
+        display: flex;
+        align-items: center;
+        font-size: 16px;
+        line-height: 1;
+    }
+
+    .container.paper-aligned .toolbar {
+        min-height: 42px;
+        margin: 0 0 8px;
+        padding: 4px 6px;
+        gap: 5px;
+        align-items: center;
+        border-radius: 8px;
+    }
+
+    .container.paper-aligned .toolbar button,
+    .container.paper-aligned #zoomValue {
+        height: 32px;
+        min-height: 32px;
+    }
+
+    .container.paper-aligned #preview {
+        flex: 1 1 auto;
+        min-height: 0;
+        margin: 0;
+        padding: 18px;
+        border-radius: 8px;
+    }
+
+    .container.paper-aligned .file-area {
+        min-height: 42px;
+        height: 42px;
+        margin: 8px 0 0;
+        padding: 5px 6px;
+        gap: 6px;
+        border-radius: 8px;
+    }
+
+    .container.paper-aligned #uploadBtn,
+    .container.paper-aligned #clearFileBtn {
+        height: 32px;
+        min-height: 32px;
+        padding: 0 12px;
+        font-size: 12px;
+    }
+}
+
+@media (min-width: 801px) and (max-width: 1100px) {
+    .preview-card {
+        padding: 12px;
+    }
+
+    .preview-card h2 {
+        margin-bottom: 8px;
+    }
+
+    #preview {
+        padding: 16px;
+    }
+
+    .file-area {
+        margin-top: 8px;
+        padding: 6px;
+    }
+}
