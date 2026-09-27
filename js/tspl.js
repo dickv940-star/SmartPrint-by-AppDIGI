@@ -130,7 +130,7 @@
 
         bitmapMode: 0,
 
-        threshold: 180,
+        threshold: 128,
 
         invert: false,
 
@@ -912,7 +912,7 @@
 
         Mode:
         0 = OFF
-        1 = LIGHT (default)
+        1 = LIGHT
         2 = STRONG
         ------------------------------------------------
         */
@@ -924,7 +924,7 @@
                     2,
                     Math.floor(
                         Number(
-                            config.rasterCleanup ?? 1
+                            config.rasterCleanup ?? 0
                         )
                     )
                 )
