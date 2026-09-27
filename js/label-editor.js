@@ -249,3 +249,16 @@ const LabelEditor={
 
 window.LabelEditor=LabelEditor;
 document.addEventListener("DOMContentLoaded",()=>LabelEditor.init());
+
+
+/* Load professional barcode validation/presets after LabelEditor is ready. */
+(function(){
+  const load=function(){
+    if(document.querySelector("script[data-smartprint-barcode-pro]")) return;
+    const s=document.createElement("script");
+    s.src="js/barcode-pro.js?v=1.0.0";
+    s.dataset.smartprintBarcodePro="1";
+    document.body.appendChild(s);
+  };
+  if(document.readyState==="loading") document.addEventListener("DOMContentLoaded",load,{once:true}); else load();
+})();
