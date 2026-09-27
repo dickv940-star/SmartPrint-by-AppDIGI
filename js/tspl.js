@@ -2,7 +2,7 @@
 
 /*
 =====================================================
- SmartPrint TSPL Engine v5.3
+ SmartPrint TSPL Engine v5.4
 =====================================================
 
  TARGET
@@ -1337,6 +1337,14 @@
         sourceCanvas,
         options = {}
     ) {
+
+        if (
+            window.Preview &&
+            sourceCanvas === window.Preview.canvas &&
+            typeof window.Preview.render === "function"
+        ) {
+            window.Preview.render({ forPrint: true });
+        }
 
         const config =
             getPrinterConfig(
