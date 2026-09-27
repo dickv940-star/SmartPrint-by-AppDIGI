@@ -246,11 +246,23 @@ const Preview = {
                     Settings.get("canvasWidth")
                 ) || 800;
 
-
             height =
                 Number(
                     Settings.get("canvasHeight")
                 ) || 1200;
+
+            /* Label Editor / TSPL is always the exact
+               100×150 mm @ 203 DPI raster surface. */
+            const printerType = String(Settings.get("printerType") || "").toLowerCase();
+            const language = String(Settings.get("printLanguage") || "").toUpperCase();
+
+            if (
+                printerType === "label" ||
+                language === "TSPL"
+            ) {
+                width = 799;
+                height = 1199;
+            }
 
         }
 
