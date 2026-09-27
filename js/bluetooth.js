@@ -1,6 +1,6 @@
 /*
 =========================================================
- SmartPrint Bluetooth Engine v6.1.0
+ SmartPrint Bluetooth Engine v6.2.0
  Universal BLE Thermal Printer Transport
 =========================================================
 
@@ -37,7 +37,7 @@
 
     "use strict";
 
-    const VERSION = "6.1.0";
+    const VERSION = "6.2.0";
 
     let device = null;
     let server = null;
@@ -1853,7 +1853,7 @@
     =====================================================
     */
 
-    async function connectSerial() {
+    async function connectSerial(options) {
 
         if (!isSerialSupported()) {
 
@@ -1865,48 +1865,89 @@
 
         }
 
+        options = options || {};
+
+        const baudRate = Number(options.baudRate) || 9600;
+
+        if (serialPort) {
+
+            try {
+
+                if (serialPort.readable || serialPort.writable) {
+
+                    log("Serial printer sudah terhubung.");
+
+                    return true;
+
+                }
+
+            } catch (e) {}
+
+        }
 
         try {
 
-            serialPort =
+            log("========================================");
+            log("BLUETOOTH CLASSIC / SERIAL DISCOVERY");
+            log("Mode: Windows COM / Bluetooth SPP");
+            log("Baud rate:", baudRate);
+            log("Membuka Serial Port picker...");
+            
+            serialPort = await navigator.serial.requestPort();
 
-                await navigator.serial.requestPort();
+            if (!serialPort) {
 
+                throw new Error("Tidak ada COM port yang dipilih.");
+
+            }
+
+            const info = serialPort.getInfo
+                ? serialPort.getInfo()
+                : {};
+
+            log("COM PORT TERPILIH:", info);
 
             await serialPort.open({
 
-                baudRate: 9600
+                baudRate: baudRate,
+
+                dataBits: Number(options.dataBits) || 8,
+
+                stopBits: Number(options.stopBits) || 1,
+
+                parity: options.parity || "none",
+
+                flowControl: options.flowControl || "none"
 
             });
 
+            log("SERIAL CONNECTED");
 
-            dispatch(
+            dispatch("connected", {
 
-                "connected",
+                type: "SERIAL",
 
-                {
+                port: serialPort,
 
-                    type: "SERIAL"
+                info: info,
 
-                }
+                baudRate: baudRate
 
-            );
+            });
 
+            dispatch("status", {
 
-            dispatch(
+                connected: true,
 
-                "status",
+                type: "SERIAL",
 
-                {
+                port: serialPort,
 
-                    connected: true,
+                info: info,
 
-                    type: "SERIAL"
+                baudRate: baudRate
 
-                }
-
-            );
-
+            });
 
             return true;
 
@@ -1915,7 +1956,6 @@
         catch (err) {
 
             serialPort = null;
-
 
             if (
 
@@ -1931,19 +1971,27 @@
 
             ) {
 
+                log("Serial/COM picker dibatalkan.");
+
+                dispatch("cancelled", { error: err });
+
                 return false;
 
             }
 
+            error("Serial connection error:", err);
 
-            error(
+            dispatch("error", {
 
-                "Serial connection error:",
+                error: err,
 
-                err
+                message: err && err.message
 
-            );
+                    ? err.message
 
+                    : String(err)
+
+            });
 
             return false;
 
@@ -3523,6 +3571,8 @@
         autoConnect: autoConnect,
 
         connectSerial: connectSerial,
+        connectCOM: connectSerial,
+        connectBluetoothCOM: connectSerial,
 
         connectBridge: connectBridge,
 
