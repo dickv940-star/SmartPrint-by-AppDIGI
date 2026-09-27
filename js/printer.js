@@ -32,7 +32,7 @@
        GLOBAL
        ===================================================== */
 
-    const VERSION = "4.7.0";
+    const VERSION = "4.8.0";
 
     const LOG_PREFIX = "[SmartPrint Printer]";
 
@@ -1593,39 +1593,41 @@
 
     async function printESC(data) {
 
-        let bytes =
-            data;
+        /*
+         * ESC/POS engine sudah memiliki renderer canvas -> bitmap
+         * dan pengiriman RAW sendiri. Jangan mengirim HTMLCanvasElement
+         * langsung ke toUint8Array().
+         */
+        if (
+            window.ESCpos &&
+            typeof window.ESCpos.print === "function" &&
+            data &&
+            typeof data.getContext === "function"
+        ) {
+            return await window.ESCpos.print(
+                data,
+                {
+                    paperWidth: state.paperWidth,
+                    cutPaper: state.cutPaper,
+                    copies: state.copies
+                }
+            );
+        }
 
+        let bytes = data;
 
         if (
             window.ESCPos &&
-            typeof window.ESCPos.render ===
-                "function"
+            typeof window.ESCPos.render === "function"
         ) {
-
             try {
-
-                bytes =
-                    await window.ESCPos.render(
-                        data
-                    );
-
+                bytes = await window.ESCPos.render(data);
             } catch (e) {
-
-                warn(
-                    "ESCPos.render gagal, menggunakan RAW:",
-                    e
-                );
-
+                warn("ESCPos.render gagal, menggunakan RAW:", e);
             }
-
         }
 
-
-        return await sendRaw(
-            bytes
-        );
-
+        return await sendRaw(bytes);
     }
 
 
@@ -2661,5 +2663,5 @@
 
 
 /* =========================================================
-   END SMARTPRINT PRINTER MANAGER v4.7.0
+   END SMARTPRINT PRINTER MANAGER v4.8.0
    ========================================================= */
