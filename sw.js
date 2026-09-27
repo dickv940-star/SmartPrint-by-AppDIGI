@@ -9,7 +9,7 @@
 "use strict";
 
 
-const CACHE_NAME = "smartprint-v6.2";
+const CACHE_NAME = "smartprint-v6.4";
 
 
 const APP_FILES = [
