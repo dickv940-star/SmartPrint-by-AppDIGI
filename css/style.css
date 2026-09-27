@@ -775,3 +775,35 @@ body {
 
 }
 }
+
+
+/* =========================================================
+   SMARTPRINT UI POLISH v6.4
+========================================================= */
+.topbar{box-shadow:0 1px 10px rgba(15,23,42,.05)}
+.status{position:relative;padding:7px 11px 7px 10px;border:1px solid #e2e8f0;border-radius:999px;background:#f8fafc;font-weight:700}
+.status small{display:block;margin-left:4px;color:#64748b;font-size:10px;font-weight:500}
+.status:has(.dot.connected){background:#f0fdf4;border-color:#bbf7d0;color:#166534}
+.container{align-items:start;gap:16px;padding:16px;max-width:1600px;margin:0 auto}
+.sidebar,.preview-card,.panel{box-shadow:0 4px 18px rgba(15,23,42,.04)}
+.preview-card{padding:16px}
+.preview-card h2{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;font-size:17px}
+.toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:7px;margin-bottom:10px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc}
+.toolbar button{min-width:38px;height:34px;border:1px solid #dbe3ed;border-radius:7px;background:#fff;color:#334155;font-weight:700;cursor:pointer}
+.toolbar button:hover{border-color:#93c5fd;background:#eff6ff;color:#1d4ed8}
+#zoomValue{min-width:48px;text-align:center;font-size:12px;font-weight:700;color:#475569}
+#preview{min-height:520px;max-height:calc(100vh - 250px);background-color:#e9edf3;background-image:linear-gradient(45deg,#f4f6f8 25%,transparent 25%),linear-gradient(-45deg,#f4f6f8 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#f4f6f8 75%),linear-gradient(-45deg,transparent 75%,#f4f6f8 75%);box-shadow:inset 0 0 0 1px rgba(148,163,184,.18);padding:24px}
+#preview.dragover{border-color:#2563eb;background-color:#eff6ff;box-shadow:inset 0 0 0 2px rgba(37,99,235,.15)}
+.preview-empty{display:flex;flex-direction:column;gap:6px;align-items:center;justify-content:center;padding:30px;color:#64748b}
+.preview-empty strong{font-size:15px;color:#475569}.preview-empty span{font-size:12px}
+#previewCanvas{background:#fff;box-shadow:0 10px 28px rgba(15,23,42,.16);outline:1px solid rgba(15,23,42,.08)}
+.file-area{margin-top:10px;padding:9px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc}
+#uploadBtn,#clearFileBtn{height:40px;border-radius:8px}
+.panel{padding:16px}.panel h2{font-size:17px;margin-bottom:12px}.panel label{margin-top:10px}
+.buttons{margin-top:16px}.buttons button{min-height:44px}
+#connectBtn{background:#172033}.connectBtn-connected{background:#16a34a!important}
+.printer-info{display:flex;gap:9px;align-items:flex-start;margin-top:12px;padding:10px;border:1px solid #e2e8f0;border-radius:9px;background:#f8fafc}
+.printer-info-dot{width:9px;height:9px;flex:0 0 9px;margin-top:4px;border-radius:50%;background:#ef4444;box-shadow:0 0 0 3px #fee2e2}
+.printer-info.connected{border-color:#bbf7d0;background:#f0fdf4}.printer-info.connected .printer-info-dot{background:#22c55e;box-shadow:0 0 0 3px #dcfce7}
+.printer-info strong{display:block;font-size:12px;color:#334155}.printer-info small{display:block;margin-top:2px;color:#64748b;font-size:10px;line-height:1.35}
+@media(max-width:900px){.container{grid-template-columns:150px minmax(0,1fr)}.panel{grid-column:1/-1;position:static}.preview-card{min-height:0}#preview{max-height:none}}
