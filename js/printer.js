@@ -32,7 +32,7 @@
        GLOBAL
        ===================================================== */
 
-    const VERSION = "4.2.1";
+    const VERSION = "4.3.0";
 
     const LOG_PREFIX = "[SmartPrint Printer]";
 
@@ -76,6 +76,8 @@
     let state = {
 
         initialized: false,
+
+        bluetoothEventsAttached: false,
 
         connected: false,
 
@@ -1144,394 +1146,83 @@
     }
 
 
-    /* =====================================================
-       BLUETOOTH CONNECTION
-       ===================================================== */
-
     async function connect() {
 
         if (state.connecting) {
-
-            warn(
-                "Connection sedang berlangsung."
-            );
-
+            warn("Connection sedang berlangsung.");
             return getStatus();
-
         }
 
-
-        if (state.connected) {
-
-            log(
-                "Printer sudah connected:",
-                state.deviceName
-            );
-
-            return getStatus();
-
-        }
-
-
-        state.connecting = true;
-
-        state.lastError = null;
-
-
-        log("========================================");
-
-        log(
-            "SMARTPRINT PRINTER CONNECT v" +
-            VERSION
-        );
-
-        log("========================================");
-
-        log(
-            "Printer Language:",
-            state.language
-        );
-
-        log(
-            "Paper:",
-            state.paperWidth +
-            " x " +
-            state.paperHeight +
-            " mm"
-        );
-
-
-        const Bluetooth =
-            getBluetooth();
-
+        const Bluetooth = getBluetooth();
 
         if (!Bluetooth) {
-
-            const err =
-                new Error(
-                    "Bluetooth Engine tidak tersedia."
-                );
-
-
-            state.lastError =
-                err.message;
-
-            state.connecting =
-                false;
-
-            error(
-                err.message
-            );
-
-            throw err;
-
+            state.lastError = "Bluetooth Engine tidak tersedia.";
+            error(state.lastError);
+            return false;
         }
-
 
         try {
 
-            let result = null;
-
-
-            /* -----------------------------------------
-               Prioritas:
-               Bluetooth.connectUser()
-               ----------------------------------------- */
-
             if (
-                typeof Bluetooth.connectUser ===
-                "function"
+                typeof Bluetooth.isConnected === "function" &&
+                Bluetooth.isConnected()
             ) {
-
-                log(
-                    "Bluetooth.connectUser()"
-                );
-
-
-                result =
-                    await Bluetooth.connectUser();
-
+                syncFromBluetooth();
+                return getStatus();
             }
 
-            else if (
-                typeof Bluetooth.connect ===
-                "function"
-            ) {
+            state.connecting = true;
+            state.lastError = null;
 
-                log(
-                    "Bluetooth.connect()"
-                );
+            log("========================================");
+            log("SMARTPRINT PRINTER CONNECT v" + VERSION);
+            log("Transport owner: Bluetooth Engine");
+            log("========================================");
 
+            let result = false;
 
-                result =
-                    await Bluetooth.connect();
-
-            }
-
-            else if (
-                typeof Bluetooth.connectBLE ===
-                "function"
-            ) {
-
-                log(
-                    "Bluetooth.connectBLE()"
-                );
-
-
-                result =
-                    await Bluetooth.connectBLE();
-
-            }
-
-            else {
-
+            if (typeof Bluetooth.connectUser === "function") {
+                result = await Bluetooth.connectUser();
+            } else if (typeof Bluetooth.connect === "function") {
+                result = await Bluetooth.connect();
+            } else if (typeof Bluetooth.connectBLE === "function") {
+                result = await Bluetooth.connectBLE();
+            } else {
                 throw new Error(
                     "Bluetooth Engine tidak mempunyai API connect."
                 );
-
             }
-
-
-            /* -----------------------------------------
-               User membatalkan picker
-               ----------------------------------------- */
 
             if (!result) {
-
-                state.connected =
-                    false;
-
-                state.connecting =
-                    false;
-
-
-                log(
-                    "Printer connection dibatalkan atau gagal."
-                );
-
-
+                state.connected = false;
+                state.connecting = false;
                 return false;
-
             }
 
-
-            /* -----------------------------------------
-               Ambil device
-               ----------------------------------------- */
-
-            const device =
-                extractDevice(result);
-
-
-            if (device) {
-
-                state.device =
-                    device;
-
-
-                state.deviceName =
-                    device.name ||
-                    result.name ||
-                    "Bluetooth Printer";
-
-
-                state.deviceId =
-                    device.id ||
-                    result.id ||
-                    "";
-
-            }
-
-
-            /* -----------------------------------------
-               Ambil server
-               ----------------------------------------- */
-
-            let server =
-                extractServer(result);
-
-
-            if (!server && state.device) {
-
-                try {
-
-                    if (
-                        state.device.gatt
-                    ) {
-
-                        log(
-                            "Menghubungkan GATT..."
-                        );
-
-
-                        server =
-                            await state.device.gatt.connect();
-
-                    }
-
-                } catch (e) {
-
-                    warn(
-                        "GATT connect gagal:",
-                        e
-                    );
-
-                }
-
-            }
-
-
-            state.server =
-                server || null;
-
-
-            /* -----------------------------------------
-               Jika Bluetooth Engine sendiri
-               sudah menyediakan write transport,
-               gunakan transport tersebut.
-               ----------------------------------------- */
-
-            if (
-                typeof Bluetooth.sendRaw ===
-                "function"
-            ) {
-
-                state.transport =
-                    "Bluetooth.sendRaw";
-
-            }
-
-
-            /* -----------------------------------------
-               Cari characteristic jika ada server
-               ----------------------------------------- */
-
-            if (state.server) {
-
-                try {
-
-                    await discoverCharacteristic(
-                        state.server
-                    );
-
-                } catch (e) {
-
-                    warn(
-                        "Characteristic discovery gagal:",
-                        e
-                    );
-
-                }
-
-            }
-
-
-            /* -----------------------------------------
-               Validasi transport
-               ----------------------------------------- */
-
-            const transportReady =
-                !!state.writeCharacteristic ||
-                !!state.transport;
-
-
-            if (!transportReady) {
-
+            if (!syncFromBluetooth()) {
                 throw new Error(
-                    "Printer ditemukan tetapi WRITE characteristic / transport tidak ditemukan."
+                    "Bluetooth connect selesai tetapi status printer belum connected."
                 );
-
             }
 
-
-            /* -----------------------------------------
-               CONNECTED
-               ----------------------------------------- */
-
-            state.connected =
-                true;
-
-            state.connecting =
-                false;
-
-            state.lastConnectedAt =
-                new Date().toISOString();
-
-
-            log("========================================");
-
-            log(
-                "PRINTER CONNECTED"
-            );
-
-            log(
-                "Name:",
-                state.deviceName ||
-                "Bluetooth Printer"
-            );
-
-            log(
-                "ID:",
-                state.deviceId ||
-                "-"
-            );
-
-            log(
-                "Transport:",
-                state.transport ||
-                "GATT WRITE"
-            );
-
-            if (
-                state.writeCharacteristic
-            ) {
-
-                log(
-                    "WRITE:",
-                    state.writeCharacteristic.uuid
-                );
-
-            }
-
-            log("========================================");
-
-
-            dispatchStatusEvent(
-                "connected"
-            );
-
+            state.connecting = false;
+            state.lastError = null;
+            state.lastConnectedAt = new Date().toISOString();
+            dispatchStatusEvent("connected");
 
             return true;
 
         } catch (e) {
 
-            state.connected =
-                false;
-
-            state.connecting =
-                false;
-
+            state.connected = false;
+            state.connecting = false;
             state.lastError =
-                e && e.message
-                    ? e.message
-                    : String(e);
+                e && e.message ? e.message : String(e);
 
-
-            error(
-                "Printer connection error:",
-                e
-            );
-
-
-            dispatchStatusEvent(
-                "error"
-            );
-
-
+            error("Printer connection error:", e);
+            dispatchStatusEvent("error");
             return false;
-
         }
-
     }
 
 
@@ -1541,111 +1232,34 @@
 
     async function disconnect() {
 
-        if (state.disconnecting) {
-
-            return false;
-
-        }
-
-
-        state.disconnecting =
-            true;
-
+        if (state.disconnecting) return false;
+        state.disconnecting = true;
 
         try {
-
-            const Bluetooth =
-                getBluetooth();
-
-
+            const Bluetooth = getBluetooth();
             if (
                 Bluetooth &&
-                typeof Bluetooth.disconnect ===
-                "function"
+                typeof Bluetooth.disconnect === "function"
             ) {
-
-                try {
-
-                    await Bluetooth.disconnect();
-
-                } catch (e) {
-
-                    warn(
-                        "Bluetooth.disconnect():",
-                        e
-                    );
-
-                }
-
+                await Bluetooth.disconnect();
             }
-
-
-            if (
-                state.device &&
-                state.device.gatt
-            ) {
-
-                try {
-
-                    if (
-                        state.device.gatt.connected
-                    ) {
-
-                        state.device.gatt.disconnect();
-
-                    }
-
-                } catch (e) {}
-
-            }
-
+        } catch (e) {
+            warn("Bluetooth.disconnect():", e);
         } finally {
-
-            state.connected =
-                false;
-
-            state.connecting =
-                false;
-
-            state.disconnecting =
-                false;
-
-            state.server =
-                null;
-
-            state.service =
-                null;
-
-            state.characteristic =
-                null;
-
-            state.writeCharacteristic =
-                null;
-
-            state.notifyCharacteristic =
-                null;
-
-            state.transport =
-                null;
-
-            state.lastDisconnectedAt =
-                new Date().toISOString();
-
-
-            log(
-                "Printer disconnected."
-            );
-
-
-            dispatchStatusEvent(
-                "disconnected"
-            );
-
+            state.connected = false;
+            state.connecting = false;
+            state.disconnecting = false;
+            state.server = null;
+            state.service = null;
+            state.characteristic = null;
+            state.writeCharacteristic = null;
+            state.notifyCharacteristic = null;
+            state.transport = null;
+            state.lastDisconnectedAt = new Date().toISOString();
+            dispatchStatusEvent("disconnected");
         }
 
-
         return true;
-
     }
 
 
@@ -1655,104 +1269,55 @@
 
     function isConnected() {
 
-        if (!state.connected) {
+        const Bluetooth = getBluetooth();
+        if (!Bluetooth) return false;
 
+        try {
+            state.connected =
+                typeof Bluetooth.isConnected === "function" &&
+                Bluetooth.isConnected() === true;
+
+            if (!state.connected) state.transport = null;
+            return state.connected;
+
+        } catch (e) {
+            state.connected = false;
+            state.transport = null;
             return false;
-
         }
-
-
-        /* Jika punya device GATT,
-           pastikan GATT masih connected. */
-
-        if (
-            state.device &&
-            state.device.gatt
-        ) {
-
-            try {
-
-                if (
-                    !state.device.gatt.connected
-                ) {
-
-                    state.connected =
-                        false;
-
-                    return false;
-
-                }
-
-            } catch (e) {}
-
-        }
-
-
-        return true;
-
     }
 
 
     function getStatus() {
 
         return {
-
             version: VERSION,
-
-            connected:
-                isConnected(),
-
-            connecting:
-                state.connecting,
-
-            deviceName:
-                state.deviceName,
-
-            deviceId:
-                state.deviceId,
-
-            language:
-                state.language,
-
-            paperWidth:
-                state.paperWidth,
-
-            paperHeight:
-                state.paperHeight,
-
-            labelWidth:
-                state.labelWidth,
-
-            labelHeight:
-                state.labelHeight,
-
-            dpi:
-                state.dpi,
-
-            canvasWidth:
-                state.canvasWidth,
-
-            canvasHeight:
-                state.canvasHeight,
-
-            transparentBackground:
-                state.transparentBackground,
-
-            transport:
-                state.transport,
-
+            connected: isConnected(),
+            connecting: state.connecting,
+            deviceName: state.deviceName,
+            deviceId: state.deviceId,
+            language: state.language,
+            paperWidth: state.paperWidth,
+            paperHeight: state.paperHeight,
+            labelWidth: state.labelWidth,
+            labelHeight: state.labelHeight,
+            dpi: state.dpi,
+            canvasWidth: state.canvasWidth,
+            canvasHeight: state.canvasHeight,
+            transparentBackground: state.transparentBackground,
+            transport: state.transport,
             characteristic:
                 state.writeCharacteristic
                     ? state.writeCharacteristic.uuid
                     : null,
-
-            error:
-                state.lastError
-
+            error: state.lastError
         };
-
     }
 
+
+    /* =====================================================
+       DEVICE NAME
+       =====================================================
 
     /* =====================================================
        DEVICE NAME
@@ -1875,91 +1440,49 @@
 
     async function sendRaw(data) {
 
-        if (!isConnected()) {
+        const Bluetooth = getBluetooth();
 
+        if (!Bluetooth) {
+            throw new Error("Bluetooth Engine tidak tersedia.");
+        }
+
+        let connected = false;
+
+        try {
+            connected =
+                typeof Bluetooth.isConnected === "function" &&
+                Bluetooth.isConnected() === true;
+        } catch (e) {}
+
+        if (!connected) {
+            state.connected = false;
+            state.transport = null;
+            throw new Error("Printer belum terhubung.");
+        }
+
+        const bytes = toUint8Array(data);
+        if (!bytes.length) return true;
+
+        if (typeof Bluetooth.sendRaw !== "function") {
             throw new Error(
-                "Printer belum terhubung."
+                "Bluetooth Engine tidak mempunyai sendRaw()."
             );
-
         }
 
-
-        const bytes =
-            toUint8Array(data);
-
-
-        if (!bytes.length) {
-
-            return true;
-
-        }
-
-
-        const Bluetooth =
-            getBluetooth();
-
-
-        /* ---------------------------------------------
-           PRIORITAS 1
-           Bluetooth.sendRaw()
-           --------------------------------------------- */
-
-        if (
-            state.transport ===
-                "Bluetooth.sendRaw" &&
-            Bluetooth &&
-            typeof Bluetooth.sendRaw ===
-                "function"
-        ) {
-
-            log(
-                "Mengirim RAW:",
-                bytes.length,
-                "bytes"
-            );
-
-
-            const result =
-                await Bluetooth.sendRaw(
-                    bytes
-                );
-
-
-            return result !== false;
-
-        }
-
-
-        /* ---------------------------------------------
-           PRIORITAS 2
-           GATT characteristic
-           --------------------------------------------- */
-
-        if (
-            state.writeCharacteristic
-        ) {
-
-            log(
-                "GATT RAW:",
-                bytes.length,
-                "bytes"
-            );
-
-
-            return await writeGATT(
-                bytes
-            );
-
-        }
-
-
-        throw new Error(
-            "Tidak ada transport printer yang tersedia."
+        log(
+            "Mengirim RAW melalui Bluetooth Engine:",
+            bytes.length,
+            "bytes"
         );
 
+        const result = await Bluetooth.sendRaw(bytes);
+        return result !== false;
     }
 
 
+    /* =====================================================
+       TEXT SEND
+       =====================================================
     /* =====================================================
        TEXT SEND
        ===================================================== */
@@ -2498,81 +2021,127 @@
 
 
     /* =====================================================
-       INITIALIZE
+       BLUETOOTH STATE SYNC
        ===================================================== */
 
-    function init() {
+    function syncFromBluetooth(detail) {
 
-        if (state.initialized) {
+        const Bluetooth = getBluetooth();
+        if (!Bluetooth) return false;
 
-            return getStatus();
+        const source = detail || {};
+        let info = null;
 
+        try {
+            if (typeof Bluetooth.getInfo === "function") {
+                info = Bluetooth.getInfo();
+            }
+        } catch (e) {}
+
+        if (source.device) state.device = source.device;
+        if (source.name) state.deviceName = source.name;
+        if (source.id) state.deviceId = source.id;
+
+        if (info) {
+            if (info.deviceName) state.deviceName = info.deviceName;
+            if (info.deviceId) state.deviceId = info.deviceId;
+            if (info.writeCharacteristic) {
+                state.writeCharacteristic = {
+                    uuid: info.writeCharacteristic
+                };
+            }
+            state.connected = info.connected === true;
+            state.transport =
+                info.type === "BLE"
+                    ? "Bluetooth.sendRaw"
+                    : (info.type || null);
+        } else {
+            try {
+                state.connected = Bluetooth.isConnected() === true;
+            } catch (e) {
+                state.connected = false;
+            }
+            state.transport =
+                state.connected ? "Bluetooth.sendRaw" : null;
         }
 
+        if (!state.connected) {
+            state.server = null;
+            state.service = null;
+            state.characteristic = null;
+            state.writeCharacteristic = null;
+            state.notifyCharacteristic = null;
+            state.transport = null;
+        }
 
-        syncSettings();
-
-
-        state.language =
-            normalizeLanguage(
-                state.language
-            );
-
-
-        state.initialized =
-            true;
-
-
-        log("========================================");
-
-        log(
-            "SmartPrint Printer Manager v" +
-            VERSION +
-            " Ready"
-        );
-
-        log("========================================");
-
-        log(
-            "Printer Language:",
-            state.language
-        );
-
-        log(
-            "Paper:",
-            state.paperWidth +
-            " x " +
-            state.paperHeight +
-            " mm"
-        );
-
-        log(
-            "Label:",
-            state.labelWidth +
-            " x " +
-            state.labelHeight +
-            " mm"
-        );
-
-        log(
-            "DPI:",
-            state.dpi
-        );
-
-        log(
-            "Transparent background:",
-            state.transparentBackground
-        );
-
-        log(
-            "Printer Manager initialized."
-        );
-
-
-        return getStatus();
-
+        return state.connected;
     }
 
+
+    function attachBluetoothEvents() {
+
+        if (
+            typeof window === "undefined" ||
+            state.bluetoothEventsAttached
+        ) return;
+
+        state.bluetoothEventsAttached = true;
+
+        window.addEventListener(
+            "smartprint-bluetooth-connected",
+            function (event) {
+                syncFromBluetooth(event.detail);
+                state.connecting = false;
+                state.lastError = null;
+                state.lastConnectedAt = new Date().toISOString();
+                dispatchStatusEvent("connected");
+            }
+        );
+
+        window.addEventListener(
+            "smartprint-bluetooth-disconnected",
+            function (event) {
+                syncFromBluetooth(event.detail);
+                state.connected = false;
+                state.connecting = false;
+                state.transport = null;
+                state.writeCharacteristic = null;
+                state.notifyCharacteristic = null;
+                state.lastDisconnectedAt = new Date().toISOString();
+                dispatchStatusEvent("disconnected");
+            }
+        );
+
+        window.addEventListener(
+            "smartprint-bluetooth-error",
+            function (event) {
+                const d = event.detail || {};
+                state.lastError =
+                    d.message ||
+                    (d.error && d.error.message) ||
+                    "Bluetooth connection error";
+                state.connecting = false;
+                dispatchStatusEvent("error");
+            }
+        );
+
+        window.addEventListener(
+            "smartprint-bluetooth-status",
+            function (event) {
+                const d = event.detail || {};
+                if (d.connected) syncFromBluetooth(d);
+                if (d.connected === false && d.type === null) {
+                    state.connected = false;
+                    state.transport = null;
+                }
+            }
+        );
+    }
+
+
+    /* =====================================================
+       INITIALIZE
+       =====================================================
 
     /* =====================================================
        SETTINGS COMPATIBILITY
@@ -2983,5 +2552,5 @@
 
 
 /* =========================================================
-   END SMARTPRINT PRINTER MANAGER v4.2.1
+   END SMARTPRINT PRINTER MANAGER v4.3.0
    ========================================================= */
