@@ -1,6 +1,6 @@
 /* =========================================================
    SMARTPRINT PRINTER MANAGER
-   Version 4.2.1
+   Version 4.3.0
    AppDIGI
    =========================================================
 
@@ -2141,7 +2141,35 @@
 
     /* =====================================================
        INITIALIZE
-       =====================================================
+       ===================================================== */
+
+    function init() {
+
+        if (state.initialized === true) {
+            return getStatus();
+        }
+
+        try {
+            syncSettings();
+            attachBluetoothEvents();
+            state.initialized = true;
+
+            log("Printer Manager initialized.");
+            log("Printer Language:", state.language);
+            log("Paper:", state.paperWidth + " x " + state.paperHeight + " mm");
+            log("Label:", state.labelWidth + " x " + state.labelHeight + " mm");
+            log("DPI:", state.dpi);
+            log("Transparent background:", state.transparentBackground);
+
+            return getStatus();
+
+        } catch (e) {
+            state.lastError = e && e.message ? e.message : String(e);
+            error("Initialization failed:", e);
+            return getStatus();
+        }
+    }
+
 
     /* =====================================================
        SETTINGS COMPATIBILITY
