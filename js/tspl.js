@@ -287,7 +287,7 @@
         */
 
         const dpi =
-            TARGET.dpi;
+            number(options.dpi ?? settings.dpi,TARGET.dpi);
 
 
         /*
@@ -307,17 +307,11 @@
         */
 
         const widthMM =
-            number(
-                options.widthMM,
-                TARGET.widthMM
-            );
+            number(options.widthMM ?? settings.labelWidth ?? settings.paperWidth,TARGET.widthMM);
 
 
         const heightMM =
-            number(
-                options.heightMM,
-                TARGET.heightMM
-            );
+            number(options.heightMM ?? settings.labelHeight ?? settings.paperHeight,TARGET.heightMM);
 
 
         /*
@@ -327,17 +321,11 @@
         */
 
         const widthDots =
-            number(
-                options.widthDots,
-                TARGET.widthDots
-            );
+            number(options.widthDots,mmToDots(widthMM,dpi));
 
 
         const heightDots =
-            number(
-                options.heightDots,
-                TARGET.heightDots
-            );
+            number(options.heightDots,mmToDots(heightMM,dpi));
 
 
         /*
