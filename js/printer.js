@@ -32,7 +32,7 @@
        GLOBAL
        ===================================================== */
 
-    const VERSION = "4.6.0";
+    const VERSION = "4.7.0";
 
     const LOG_PREFIX = "[SmartPrint Printer]";
 
@@ -1235,6 +1235,28 @@
     /* =====================================================
        CONNECT BLUETOOTH COM / SERIAL
        ===================================================== */
+
+    async function connectSerialAuto(options) {
+
+        if (
+            window.Bluetooth &&
+            typeof window.Bluetooth.connectSerialAuto === "function"
+        ) {
+            const result =
+                await window.Bluetooth.connectSerialAuto(options || {});
+
+            if (result) {
+                state.connected = true;
+                state.connecting = false;
+                state.transport = "SERIAL";
+                state.lastError = null;
+            }
+
+            return result;
+        }
+
+        return connectSerial(options);
+    }
 
     async function connectSerial(options) {
 
@@ -2495,6 +2517,9 @@
         connectSerial:
             connectSerial,
 
+        connectSerialAuto:
+            connectSerialAuto,
+
         connectBluetoothCOM:
             connectSerial,
 
@@ -2636,5 +2661,5 @@
 
 
 /* =========================================================
-   END SMARTPRINT PRINTER MANAGER v4.5.0
+   END SMARTPRINT PRINTER MANAGER v4.7.0
    ========================================================= */
