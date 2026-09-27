@@ -200,6 +200,101 @@ class SmartPrint {
 
 
     // ==========================================
+    // PAPER / SIDE PANEL ALIGNMENT
+    // ==========================================
+
+    bindPaperAlignment() {
+
+        const container = document.querySelector(".container");
+        const canvas = document.getElementById("previewCanvas");
+
+        if (!container) return;
+
+        let frame = 0;
+
+        const clearAlignment = () => {
+            container.style.removeProperty("--paper-align-top");
+            container.style.removeProperty("--paper-align-height");
+            container.classList.remove("paper-aligned");
+        };
+
+        const sync = () => {
+
+            cancelAnimationFrame(frame);
+
+            frame = requestAnimationFrame(() => {
+
+                if (window.innerWidth <= 1100) {
+                    clearAlignment();
+                    return;
+                }
+
+                const paper = document.getElementById("previewCanvas");
+
+                if (!paper) {
+                    clearAlignment();
+                    return;
+                }
+
+                const containerRect = container.getBoundingClientRect();
+                const paperRect = paper.getBoundingClientRect();
+                const styles = getComputedStyle(container);
+                const paddingTop = parseFloat(styles.paddingTop) || 0;
+
+                const top =
+                    Math.max(
+                        0,
+                        paperRect.top - containerRect.top - paddingTop
+                    );
+
+                const height =
+                    Math.max(
+                        1,
+                        paperRect.height
+                    );
+
+                container.style.setProperty(
+                    "--paper-align-top",
+                    Math.round(top) + "px"
+                );
+
+                container.style.setProperty(
+                    "--paper-align-height",
+                    Math.round(height) + "px"
+                );
+
+                container.classList.add("paper-aligned");
+            });
+        };
+
+        const observe = () => {
+
+            const paper = document.getElementById("previewCanvas");
+
+            if (paper && typeof ResizeObserver !== "undefined") {
+                const ro = new ResizeObserver(sync);
+                ro.observe(paper);
+                ro.observe(container);
+                this._paperAlignmentObserver = ro;
+            }
+
+            window.addEventListener("resize", sync, { passive: true });
+            window.addEventListener("scroll", sync, { passive: true });
+
+            sync();
+        };
+
+        observe();
+
+        /* Preview.init() creates/recreates #previewCanvas before this
+           method normally runs. If another module recreates it later,
+           retry once on the next frame. */
+        setTimeout(sync, 100);
+        setTimeout(sync, 500);
+    }
+
+
+    // ==========================================
     // PRINTER BUTTONS
     // ==========================================
 
