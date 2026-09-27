@@ -32,7 +32,7 @@
        GLOBAL
        ===================================================== */
 
-    const VERSION = "4.4.0";
+    const VERSION = "4.5.0";
 
     const LOG_PREFIX = "[SmartPrint Printer]";
 
@@ -1235,6 +1235,50 @@
             error("Printer connection error:", e);
             dispatchStatusEvent("error");
             return false;
+        }
+    }
+
+
+    /* =====================================================
+       CONNECT BLUETOOTH COM / SERIAL
+       ===================================================== */
+
+    async function connectSerial(options) {
+
+        const Bluetooth = getBluetooth();
+
+        if (!Bluetooth || typeof Bluetooth.connectSerial !== "function") {
+            state.lastError = "Web Serial / Bluetooth COM tidak tersedia.";
+            return false;
+        }
+
+        state.connecting = true;
+        state.lastError = null;
+
+        try {
+            const result = await Bluetooth.connectSerial(options || { baudRate: 9600 });
+
+            if (!result) {
+                state.connected = false;
+                return false;
+            }
+
+            syncFromBluetooth();
+            state.connected = true;
+            state.connecting = false;
+            state.transport = "SERIAL";
+            state.lastConnectedAt = new Date().toISOString();
+            dispatchStatusEvent("connected");
+            return true;
+
+        } catch (e) {
+            state.connected = false;
+            state.lastError = e && e.message ? e.message : String(e);
+            error("Serial connection error:", e);
+            dispatchStatusEvent("error");
+            return false;
+        } finally {
+            state.connecting = false;
         }
     }
 
@@ -2455,6 +2499,12 @@
         connect:
             connect,
 
+        connectSerial:
+            connectSerial,
+
+        connectBluetoothCOM:
+            connectSerial,
+
         disconnect:
             disconnect,
 
@@ -2593,5 +2643,5 @@
 
 
 /* =========================================================
-   END SMARTPRINT PRINTER MANAGER v4.4.0
+   END SMARTPRINT PRINTER MANAGER v4.5.0
    ========================================================= */
