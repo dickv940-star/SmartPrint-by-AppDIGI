@@ -1,6 +1,6 @@
 /*
 =========================================================
- SmartPrint Bluetooth Engine v6.0.0
+ SmartPrint Bluetooth Engine v6.1.0
  Universal BLE Thermal Printer Transport
 =========================================================
 
@@ -37,7 +37,7 @@
 
     "use strict";
 
-    const VERSION = "6.0.0";
+    const VERSION = "6.1.0";
 
     let device = null;
     let server = null;
@@ -97,12 +97,6 @@
              */
 
             "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
-
-            /*
-             * Serial service
-             */
-
-            "00001101-0000-1000-8000-00805f9b34fb"
 
         ]
 
@@ -743,197 +737,84 @@
     */
 
     async function connectGATT(target) {
-
-        if (!target) {
-
-            throw new Error(
-
-                "Bluetooth device tidak tersedia."
-
-            );
-
-        }
-
-
-        if (!target.gatt) {
-
-            throw new Error(
-
-                "Bluetooth device tidak memiliki GATT."
-
-            );
-
-        }
-
+        if (!target) throw new Error("Bluetooth device tidak tersedia.");
+        if (!target.gatt) throw new Error("Bluetooth device tidak memiliki GATT.");
 
         device = target;
-
-
         attachDisconnectHandler(device);
-
-
         clearCharacteristics();
 
+        try {
+            server = device.gatt.connected
+                ? device.gatt
+                : await device.gatt.connect();
 
-        if (device.gatt.connected) {
+            if (!server) throw new Error("GATT server tidak tersedia.");
 
-            log(
+            log("GATT CONNECTED");
+            dispatch("gattconnected", { device: device });
 
-                "GATT sudah connected:",
+            await discoverServices();
+            saveDeviceInfo();
 
-                getDeviceName()
-
-            );
-
-            server = device.gatt;
-
-        }
-
-        else {
-
-            log(
-
-                "GATT connecting:",
-
-                getDeviceName() || "(unknown)"
-
-            );
-
-
-            server =
-
-                await device.gatt.connect();
-
-        }
-
-
-        if (!server) {
-
-            throw new Error(
-
-                "GATT server tidak tersedia."
-
-            );
-
-        }
-
-
-        log("GATT CONNECTED");
-
-
-        dispatch(
-
-            "gattconnected",
-
-            {
-
-                device: device
-
+            if (!writeCharacteristic) {
+                throw new Error(
+                    "Printer terhubung ke Bluetooth tetapi WRITE characteristic tidak ditemukan."
+                );
             }
 
-        );
-
-
-        await discoverServices();
-
-
-        saveDeviceInfo();
-
-
-        if (!writeCharacteristic) {
-
-            throw new Error(
-
-                "Printer terhubung ke Bluetooth tetapi WRITE characteristic tidak ditemukan."
-
-            );
-
-        }
-
-
-        log("========================================");
-
-        log("PRINTER BLE CONNECTED");
-
-        log(
-
-            "Printer:",
-
-            getDeviceName() || "(unknown)"
-
-        );
-
-        log(
-
-            "WRITE:",
-
-            writeCharacteristic.uuid
-
-        );
-
-        log(
-
-            "WRITE WITHOUT RESPONSE:",
-
-            !!writeCharacteristic.properties
-
-                .writeWithoutResponse
-
-        );
-
-        log(
-
-            "WRITE:",
-
-            !!writeCharacteristic.properties.write
-
-        );
-
-        log("========================================");
-
-
-        dispatch(
-
-            "connected",
-
-            {
-
+            dispatch("connected", {
                 device: device,
-
                 name: getDeviceName(),
-
+                id: device.id || "",
                 type: "BLE",
+                writeCharacteristic: writeCharacteristic.uuid,
+                writeMode:
+                    writeCharacteristic.properties.writeWithoutResponse
+                        ? "WRITE WITHOUT RESPONSE"
+                        : "WRITE"
+            });
 
-                writeCharacteristic:
-
-                    writeCharacteristic.uuid
-
-            }
-
-        );
-
-
-        dispatch(
-
-            "status",
-
-            {
-
+            dispatch("status", {
                 connected: true,
-
                 type: "BLE",
+                device: device,
+                name: getDeviceName(),
+                id: device.id || "",
+                writeCharacteristic: writeCharacteristic.uuid
+            });
 
-                device: device
+            return true;
 
-            }
+        } catch (err) {
 
-        );
+            warn("GATT connection/discovery gagal:", err);
+            clearCharacteristics();
+            server = null;
 
+            try {
+                if (device && device.gatt && device.gatt.connected) {
+                    device.gatt.disconnect();
+                }
+            } catch (e) {}
 
-        return true;
+            dispatch("status", {
+                connected: false,
+                type: null,
+                device: device,
+                error: err
+            });
 
+            throw err;
+        }
     }
 
+
+    /*
+    =====================================================
+     DISCOVER SERVICES
+    =====================================================
+    */
 
     /*
     =====================================================
