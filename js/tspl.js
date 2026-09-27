@@ -130,7 +130,7 @@
 
         bitmapMode: 0,
 
-        threshold: 128,
+        threshold: 160,
 
         invert: false,
 
@@ -642,13 +642,13 @@
         */
 
         ctx.imageSmoothingEnabled =
-            true;
+            false;
 
 
         try {
 
             ctx.imageSmoothingQuality =
-                "high";
+                "low";
 
         } catch (error) {}
 
