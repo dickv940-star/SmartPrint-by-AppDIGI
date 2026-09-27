@@ -1226,7 +1226,7 @@ class SmartPrint {
             () => {
 
                 navigator.serviceWorker
-                    .register("sw.js?v=6.1.0")
+                    .register("sw.js?v=6.2.0")
 
                     .then(
                         reg => {
