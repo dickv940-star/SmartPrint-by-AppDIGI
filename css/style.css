@@ -1032,3 +1032,81 @@ body {
         grid-template-columns:1fr 1fr;
     }
 }
+
+
+/* =========================================================
+   SMARTPRINT DESKTOP PANEL ALIGNMENT v7.1
+   Left / Canvas / Right stay on one horizontal level
+========================================================= */
+
+@media (min-width: 1101px) {
+    .container {
+        align-items: stretch;
+        grid-template-columns:
+            clamp(170px, 12vw, 190px)
+            minmax(0, 1fr)
+            clamp(230px, 18vw, 280px);
+        gap: 12px;
+        padding: 12px;
+    }
+
+    .sidebar,
+    .workspace,
+    .panel {
+        min-height: 0;
+    }
+
+    .sidebar,
+    .panel {
+        position: static;
+        align-self: stretch;
+        height: auto;
+        max-height: none;
+    }
+
+    .workspace {
+        display: flex;
+        min-height: 0;
+    }
+
+    .preview-card {
+        min-height: calc(100vh - 88px);
+        height: calc(100vh - 88px);
+        max-height: calc(100vh - 88px);
+    }
+
+    #preview {
+        min-height: 0;
+        max-height: none;
+        flex: 1 1 auto;
+    }
+
+    /* Side bars are visually aligned with the main page */
+    .sidebar,
+    .panel {
+        overflow-y: auto;
+        scrollbar-width: thin;
+    }
+}
+
+@media (min-width: 801px) and (max-width: 1100px) {
+    .container {
+        align-items: stretch;
+    }
+
+    .sidebar {
+        position: static;
+        align-self: stretch;
+    }
+
+    .panel {
+        position: static;
+    }
+}
+
+/* Keep all three desktop columns from creating horizontal overflow */
+@media (min-width: 801px) {
+    .container > * {
+        min-width: 0;
+    }
+}
