@@ -32,7 +32,7 @@
        GLOBAL
        ===================================================== */
 
-    const VERSION = "4.5.0";
+    const VERSION = "4.6.0";
 
     const LOG_PREFIX = "[SmartPrint Printer]";
 
@@ -1195,21 +1195,14 @@
 
             if (!result) {
 
+                state.connected = false;
+                state.connecting = false;
+                state.lastError = "BLE printer tidak terhubung.";
+
                 log("BLE printer tidak terhubung.");
-                log("Mencoba Bluetooth Classic / COM via Web Serial...");
+                log("Untuk printer Bluetooth Classic/COM, gunakan connectSerial() dari tombol Bluetooth COM.");
 
-                if (typeof Bluetooth.connectSerial === "function") {
-                    result = await Bluetooth.connectSerial({
-                        baudRate: 9600
-                    });
-                }
-
-                if (!result) {
-                    state.connected = false;
-                    state.connecting = false;
-                    state.lastError = "BLE tidak terhubung dan COM/Serial juga belum dipilih.";
-                    return false;
-                }
+                return false;
             }
 
             if (!syncFromBluetooth()) {
