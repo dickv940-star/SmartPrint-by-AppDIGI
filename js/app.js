@@ -83,6 +83,8 @@ class SmartPrint {
 
         this.bindPrinter();
 
+        this.bindPrinterStatusEvents();
+
         this.bindFile();
 
         this.bindPreview();
@@ -185,11 +187,16 @@ class SmartPrint {
                 "fileInput"
             );
 
+        const upload =
+            document.getElementById("uploadBtn");
+
+        /* Tombol Pilih File harus benar-benar membuka file picker. */
+        if (upload && input) {
+            upload.addEventListener("click", () => input.click());
+        }
 
         if (!input) {
-
             return;
-
         }
 
 
@@ -739,6 +746,7 @@ class SmartPrint {
 
 
                         case "100":
+                        case "100x150":
 
                             Settings.set(
                                 "paperWidth",
@@ -746,8 +754,19 @@ class SmartPrint {
                             );
 
                             Settings.set(
+                                "paperHeight",
+                                150
+                            );
+
+                            /* TSPL target exact: 799 x 1199 dots @ 203 DPI */
+                            Settings.set(
                                 "canvasWidth",
-                                800
+                                799
+                            );
+
+                            Settings.set(
+                                "canvasHeight",
+                                1199
                             );
 
                             break;
@@ -1050,43 +1069,70 @@ class SmartPrint {
 
     updatePrinterStatus(
         connected,
-        name = ""
+        name = "",
+        type = ""
     ) {
 
-        const status =
-            document.getElementById(
-                "printerStatus"
-            );
+        const status = document.getElementById("printerStatus");
+        const typeLabel = document.getElementById("printerStatusType");
+        const dot = document.querySelector(".dot");
+        const info = document.getElementById("printerInfo");
+        const infoTitle = document.getElementById("printerInfoTitle");
+        const infoDetail = document.getElementById("printerInfoDetail");
+        const connect = document.getElementById("connectBtn");
 
+        const connected = !!connected;
+        const title = name || (type === "SERIAL" ? "Bluetooth / COM" : "Printer Connected");
+        const detail = connected
+            ? (type === "SERIAL" ? "Bluetooth Classic • Web Serial • COM siap digunakan" : (type || "Printer") + " terhubung")
+            : "Printer belum terhubung";
 
-        const dot =
-            document.querySelector(
-                ".dot"
-            );
-
-
-        if (status) {
-
-            status.textContent =
-                connected
-                    ? (
-                        name ||
-                        "Printer Connected"
-                    )
-                    : "No Printer";
-
+        if (status) status.textContent = connected ? title : "Tidak Terhubung";
+        if (typeLabel) typeLabel.textContent = detail;
+        if (dot) dot.classList.toggle("connected", connected);
+        if (info) info.classList.toggle("connected", connected);
+        if (infoTitle) infoTitle.textContent = connected ? title : "Tidak terhubung";
+        if (infoDetail) infoDetail.textContent = detail;
+        if (connect) {
+            connect.classList.toggle("connectBtn-connected", connected);
+            connect.textContent = connected ? "✓ Printer Terhubung" : "🔵 Hubungkan Printer";
         }
+    }
 
 
-        if (dot) {
-
-            dot.classList.toggle(
-                "connected",
-                connected
-            );
-
+    syncPrinterStatus() {
+        try {
+            if (typeof Bluetooth !== "undefined" && typeof Bluetooth.isConnected === "function") {
+                const connected = Bluetooth.isConnected();
+                const type = typeof Bluetooth.getConnectionType === "function"
+                    ? Bluetooth.getConnectionType() : "";
+                const name = typeof Bluetooth.getDeviceName === "function"
+                    ? Bluetooth.getDeviceName() : "";
+                this.updatePrinterStatus(connected, name, type);
+                return;
+            }
+        } catch (e) {
+            console.warn("Printer status sync:", e);
         }
+        this.updatePrinterStatus(false);
+    }
 
+
+    bindPrinterStatusEvents() {
+        const sync = (event) => {
+            const d = event && event.detail ? event.detail : {};
+            this.updatePrinterStatus(
+                d.connected !== false,
+                d.name || (d.type === "SERIAL" ? "Bluetooth / COM" : ""),
+                d.type || ""
+            );
+        };
+        window.addEventListener("smartprint-bluetooth-connected", sync);
+        window.addEventListener("smartprint-bluetooth-status", sync);
+        window.addEventListener("smartprint-bluetooth-disconnected", () => this.updatePrinterStatus(false));
+        this.syncPrinterStatus();
+        setTimeout(() => this.syncPrinterStatus(), 500);
+        setTimeout(() => this.syncPrinterStatus(), 1500);
     }
 
 
