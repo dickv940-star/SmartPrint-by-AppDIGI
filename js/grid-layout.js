@@ -84,9 +84,20 @@
                 '</select></label>' +
             '</div>' +
             '<div class="le-grid-actions">' +
+                '<button type="button" id="leGridAutoFit">Auto Fit Grid</button>' +
                 '<button type="button" id="leGridApply">Apply Grid</button>' +
                 '<button type="button" id="leGridClear">Clear Generated</button>' +
             '</div>' +
+            '<div class="le-section-title">PER-CELL CUSTOM</div>' +
+            '<div class="le-grid">' +
+                '<label>Cell #<input id="leCellIndex" type="number" min="1" step="1" value="1"></label>' +
+                '<label>Cell X (mm)<input id="leCellX" type="number" step="0.1"></label>' +
+                '<label>Cell Y (mm)<input id="leCellY" type="number" step="0.1"></label>' +
+                '<label>Cell Width (mm)<input id="leCellW" type="number" min="0.1" step="0.1"></label>' +
+                '<label>Cell Height (mm)<input id="leCellH" type="number" min="0.1" step="0.1"></label>' +
+                '<label>Cell Rotation<select id="leCellR"><option value="0">0°</option><option value="90">90°</option><option value="180">180°</option><option value="270">270°</option></select></label>' +
+            '</div>' +
+            '<div class="le-grid-actions"><button type="button" id="leCellLoad">Load Cell</button><button type="button" id="leCellApply">Apply Cell</button></div>' +
             '<div class="le-paper-note" id="leGridInfo">Pilih Barcode/QR, tentukan baris, kolom, dan jarak.</div>';
 
         panel.appendChild(section);
@@ -102,8 +113,11 @@
             el.addEventListener("change", () => updateInfo());
         });
 
+        document.getElementById("leGridAutoFit").onclick = autoFitGrid;
         document.getElementById("leGridApply").onclick = applyGrid;
         document.getElementById("leGridClear").onclick = clearGenerated;
+        document.getElementById("leCellLoad").onclick = loadCell;
+        document.getElementById("leCellApply").onclick = applyCell;
         updateInfo();
     }
 
@@ -121,6 +135,77 @@
             startYmm: Math.max(0, n("leGridStartY") || 0),
             align: document.getElementById("leGridAlign")?.value || "left"
         };
+    }
+
+    function autoFitGrid() {
+        const source = LE.selected;
+        if (!source || !selectedIsLayoutObject()) {
+            alert("Pilih Barcode atau QR Code terlebih dahulu.");
+            return;
+        }
+        const g = readUI();
+        const { w, h } = labelDots();
+        const gapX = mmToDot(g.gapXmm), gapY = mmToDot(g.gapYmm);
+        const startX = mmToDot(g.startXmm), startY = mmToDot(g.startYmm);
+        const availableW = Math.max(1, w - startX);
+        const availableH = Math.max(1, h - startY);
+        const cols = Math.max(1, Math.floor((availableW + gapX) / Math.max(1, source.width + gapX)));
+        const rows = Math.max(1, Math.floor((availableH + gapY) / Math.max(1, source.height + gapY)));
+        const colsEl = document.getElementById("leGridCols");
+        const rowsEl = document.getElementById("leGridRows");
+        const modeEl = document.getElementById("leGridMode");
+        if (colsEl) colsEl.value = cols;
+        if (rowsEl) rowsEl.value = rows;
+        if (modeEl) modeEl.value = "grid";
+        updateInfo();
+        const info = document.getElementById("leGridInfo");
+        if (info) info.textContent = "Auto Fit: " + cols + " kolom × " + rows + " baris = " + (cols * rows) + " objek.";
+    }
+
+    function generatedCells() {
+        return LE.objects.filter(o => o.type && (o.type === "barcode" || o.type === "qr") &&
+            (o === LE.selected || o.generatedByGrid));
+    }
+
+    function loadCell() {
+        const i = Math.max(1, Math.floor(Number(document.getElementById("leCellIndex")?.value) || 1));
+        const cells = generatedCells();
+        const o = cells[i - 1];
+        if (!o) {
+            alert("Cell #" + i + " belum tersedia. Terapkan Grid terlebih dahulu.");
+            return;
+        }
+        const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; };
+        set("leCellX", dotToMm(o.x)); set("leCellY", dotToMm(o.y));
+        set("leCellW", dotToMm(o.width)); set("leCellH", dotToMm(o.height));
+        set("leCellR", String(Math.round(o.rotation || 0)));
+        LE.select(o);
+    }
+
+    function applyCell() {
+        const i = Math.max(1, Math.floor(Number(document.getElementById("leCellIndex")?.value) || 1));
+        const cells = generatedCells();
+        const o = cells[i - 1];
+        if (!o) {
+            alert("Cell #" + i + " belum tersedia.");
+            return;
+        }
+        const n = id => Number(document.getElementById(id)?.value);
+        const x = n("leCellX"), y = n("leCellY"), w = n("leCellW"), h = n("leCellH");
+        if ([x,y,w,h].some(v => !Number.isFinite(v) || v < 0)) {
+            alert("X, Y, Width, Height harus diisi dengan angka valid.");
+            return;
+        }
+        const { w: lw, h: lh } = labelDots();
+        o.x = LE.clamp(mmToDot(x), 0, Math.max(0, lw - 1));
+        o.y = LE.clamp(mmToDot(y), 0, Math.max(0, lh - 1));
+        o.width = LE.clamp(mmToDot(w), 1, lw);
+        o.height = LE.clamp(mmToDot(h), 1, lh);
+        o.rotation = Number(document.getElementById("leCellR")?.value) || 0;
+        o.generatedByGrid = false;
+        o.gridCellCustom = true;
+        LE.select(o);
+        updateInfo();
     }
 
     function updateInfo() {
