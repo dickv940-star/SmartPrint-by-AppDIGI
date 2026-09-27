@@ -4,7 +4,7 @@ const LabelEditor={
  init(){this.ensure();this.panel();this.bind();this.render();},
  ensure(){if(window.Settings)Settings.set({printerType:"label",printLanguage:"TSPL",paperWidth:100,paperHeight:150,labelWidth:100,labelHeight:150,canvasWidth:799,canvasHeight:1199});},
  canvas(){return document.getElementById("previewCanvas");},
- open(){this.enabled=true;this.ensure();if(window.Preview){Preview.scale=.5;Preview.posX=0;Preview.posY=0;Preview.rotation=0;Preview.render();}document.getElementById("labelEditorPanel").hidden=false;this.render();},
+ open(){this.enabled=true;this.ensure();this.bind();if(window.Preview){Preview.scale=.5;Preview.posX=0;Preview.posY=0;Preview.rotation=0;Preview.render();}document.getElementById("labelEditorPanel").hidden=false;this.render();},
  close(){this.enabled=false;document.getElementById("labelEditorPanel").hidden=true;this.render();},
  panel(){
   if(document.getElementById("labelEditorPanel"))return;
