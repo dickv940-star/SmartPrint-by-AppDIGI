@@ -1089,6 +1089,44 @@
         }
 
 
+        /*
+        ------------------------------------------------
+        PRINTER BIT POLARITY
+        ------------------------------------------------
+
+        Target printer membaca:
+
+        0 = BLACK
+        1 = WHITE
+
+        Raster internal SmartPrint:
+
+        1 = BLACK
+        0 = WHITE
+
+        Balik setiap byte sebelum dikirim agar:
+
+        WHITE background -> 1
+        BLACK text      -> 0
+
+        Ini memperbaiki hasil yang sebelumnya menjadi
+        BLACK BLOCK dengan tulisan putih.
+        ------------------------------------------------
+        */
+
+        for (
+            let i = 0;
+            i < bitmap.length;
+            i++
+        ) {
+
+            bitmap[i] =
+                0xFF ^
+                bitmap[i];
+
+        }
+
+
         const totalPixels =
             width *
             height;
