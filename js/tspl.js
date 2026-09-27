@@ -1470,6 +1470,22 @@
 
     /* =================================================
        RENDER
+       ================================================= */
+
+    function render(
+        canvas,
+        options = {}
+    ) {
+
+        const job = buildJob(canvas, options);
+
+        return job.data;
+
+    }
+
+
+    /* =================================================
+       RENDER
        =================================================
        Printer Manager expects TSPL.render(canvas) to
        return the final RAW Uint8Array job.
@@ -1973,6 +1989,8 @@
         buildJob,
 
         fromCanvas,
+
+        render,
 
         render,
 
