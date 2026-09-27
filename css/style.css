@@ -1110,3 +1110,47 @@ body {
         min-width: 0;
     }
 }
+
+
+/* =========================================================
+   SMARTPRINT PAPER-EDGE ALIGNMENT v7.2
+   Side panels follow the actual white label canvas edges.
+========================================================= */
+
+@media (min-width: 1101px) {
+
+    .container.paper-aligned {
+        align-items: start;
+    }
+
+    .container.paper-aligned > .sidebar,
+    .container.paper-aligned > .panel {
+        align-self: start;
+        position: relative;
+        top: 0;
+        margin-top: var(--paper-align-top, 0px);
+        height: var(--paper-align-height, auto);
+        min-height: 0;
+        max-height: var(--paper-align-height, none);
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+
+    .container.paper-aligned > .sidebar {
+        scrollbar-gutter: stable;
+    }
+
+    .container.paper-aligned > .panel {
+        scrollbar-gutter: stable;
+    }
+}
+
+/* On tablet/mobile the normal responsive layout takes over. */
+@media (max-width: 1100px) {
+    .container.paper-aligned > .sidebar,
+    .container.paper-aligned > .panel {
+        margin-top: 0;
+        height: auto;
+        max-height: none;
+    }
+}
