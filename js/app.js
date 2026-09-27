@@ -981,10 +981,10 @@ class SmartPrint {
                     let connected = false;
 
                     if (
-                        typeof Printer.connectSerial === "function"
+                        typeof Printer.connectSerialAuto === "function"
                     ) {
                         connected =
-                            await Printer.connectSerial({
+                            await Printer.connectSerialAuto({
                                 baudRate: 9600
                             });
                     } else {
@@ -1081,21 +1081,21 @@ class SmartPrint {
         const infoDetail = document.getElementById("printerInfoDetail");
         const connect = document.getElementById("connectBtn");
 
-        const connected = !!connected;
+        const isOnline = !!connected;
         const title = name || (type === "SERIAL" ? "Bluetooth / COM" : "Printer Connected");
-        const detail = connected
+        const detail = isOnline
             ? (type === "SERIAL" ? "Bluetooth Classic • Web Serial • COM siap digunakan" : (type || "Printer") + " terhubung")
             : "Printer belum terhubung";
 
-        if (status) status.textContent = connected ? title : "Tidak Terhubung";
+        if (status) status.textContent = isOnline ? title : "Tidak Terhubung";
         if (typeLabel) typeLabel.textContent = detail;
-        if (dot) dot.classList.toggle("connected", connected);
-        if (info) info.classList.toggle("connected", connected);
-        if (infoTitle) infoTitle.textContent = connected ? title : "Tidak terhubung";
+        if (dot) dot.classList.toggle("connected", isOnline);
+        if (info) info.classList.toggle("connected", isOnline);
+        if (infoTitle) infoTitle.textContent = isOnline ? title : "Tidak terhubung";
         if (infoDetail) infoDetail.textContent = detail;
         if (connect) {
-            connect.classList.toggle("connectBtn-connected", connected);
-            connect.textContent = connected ? "✓ Printer Terhubung" : "🔵 Hubungkan Printer";
+            connect.classList.toggle("connectBtn-connected", isOnline);
+            connect.textContent = isOnline ? "✓ Printer Terhubung" : "🔵 Hubungkan Printer";
         }
     }
 
