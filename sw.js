@@ -2,13 +2,13 @@
 =================================================
  SmartPrint by AppDIGI
  Service Worker
- Version 4.2
+ Version 7.2
 =================================================
 */
 
 "use strict";
 
-const CACHE_NAME = "smartprint-v7.1";
+const CACHE_NAME = "smartprint-v7.2";
 
 const APP_FILES = [
     "./",
@@ -39,69 +39,66 @@ const APP_FILES = [
     "./assets/icons/icon-512-maskable.png"
 ];
 
-// ========================================
-// INSTALL
-// ========================================
 self.addEventListener("install", event => {
-    console.log("SmartPrint Service Worker Installing");
-
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(cache => cache.addAll(APP_FILES))
-            .then(() => {
-                console.log("SmartPrint Cache Created:", CACHE_NAME);
-                return self.skipWaiting();
-            })
+            .then(() => self.skipWaiting())
     );
 });
 
-// ========================================
-// ACTIVATE
-// ========================================
 self.addEventListener("activate", event => {
-    console.log("SmartPrint Service Worker Active");
-
     event.waitUntil(
         caches.keys()
             .then(keys => Promise.all(
-                keys.map(key => {
-                    if (key !== CACHE_NAME) {
-                        console.log("Delete Cache:", key);
-                        return caches.delete(key);
-                    }
-                    return undefined;
-                })
+                keys.map(key => key === CACHE_NAME ? null : caches.delete(key))
             ))
             .then(() => self.clients.claim())
     );
 });
 
-// ========================================
-// FETCH
-// ========================================
 self.addEventListener("fetch", event => {
-    if (event.request.method !== "GET") {
+    if (event.request.method !== "GET") return;
+
+    const url = new URL(event.request.url);
+    const isAppCode =
+        url.pathname.endsWith("/index.html") ||
+        url.pathname.endsWith("/install.js") ||
+        url.pathname.endsWith("/bluetooth.js") ||
+        url.pathname.endsWith("/printer.js") ||
+        url.pathname.endsWith("/app.js") ||
+        url.pathname.endsWith("/settings.js") ||
+        url.pathname.endsWith("/sw.js");
+
+    /* Always try network first for application code so the installed
+       PWA receives the latest Bluetooth fix after a deployment. */
+    if (isAppCode) {
+        event.respondWith(
+            fetch(event.request)
+                .then(response => {
+                    if (response && response.ok) {
+                        const copy = response.clone();
+                        caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+                    }
+                    return response;
+                })
+                .catch(() => caches.match(event.request).then(cached => cached || caches.match("./index.html")))
+        );
         return;
     }
 
     event.respondWith(
-        fetch(event.request)
-            .then(response => {
-                if (response && response.status === 200 && response.type === "basic") {
-                    const clone = response.clone();
-                    caches.open(CACHE_NAME).then(cache => {
-                        cache.put(event.request, clone);
-                    });
-                }
-                return response;
-            })
-            .catch(() => {
-                return caches.match(event.request).then(response => {
-                    if (response) {
-                        return response;
+        caches.match(event.request)
+            .then(cached => {
+                if (cached) return cached;
+                return fetch(event.request).then(response => {
+                    if (response && response.ok && response.type === "basic") {
+                        const copy = response.clone();
+                        caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
                     }
-                    return caches.match("./index.html");
+                    return response;
                 });
             })
+            .catch(() => caches.match("./index.html"))
     );
 });
