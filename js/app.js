@@ -300,79 +300,74 @@ class SmartPrint {
 
     bindPrinter() {
 
-        const connect =
-            document.getElementById(
-                "connectBtn"
-            );
+        const isLabelPrinter = () => {
+            try {
+                return String(
+                    Settings && typeof Settings.get === "function"
+                        ? Settings.get("printerType", "label")
+                        : "label"
+                ).toLowerCase() === "label";
+            } catch (e) {
+                return true;
+            }
+        };
+
+        const connect = document.getElementById("connectBtn");
 
         if (connect) {
-
-            connect.addEventListener(
-                "click",
-                async () => {
-
-                    /* IMPORTANT: requestPort() must run directly
-                       from this user click. Do not open BLE picker
-                       before Web Serial or the browser will reject
-                       the COM permission request. */
-                    try {
-                        const result =
-                            await Printer.connectSerialAuto({ baudRate: 9600 });
-
-                        if (result) {
-                            this.showToast("Bluetooth COM Connected");
-                        } else {
-                            this.showToast("COM printer tidak dipilih");
+            connect.addEventListener("click", async () => {
+                try {
+                    if (isLabelPrinter()) {
+                        if (typeof Bluetooth === "undefined" ||
+                            typeof Bluetooth.connectUser !== "function") {
+                            throw new Error("Web Bluetooth Engine tidak tersedia.");
                         }
-                    } catch (e) {
-                        console.error("Bluetooth COM Connect Error", e);
-                        this.showToast("Gagal menghubungkan COM printer");
+
+                        this.showToast("Pilih printer Bluetooth...");
+                        const result = await Bluetooth.connectUser();
+
+                        if (!result) {
+                            const info = typeof Bluetooth.getInfo === "function"
+                                ? Bluetooth.getInfo() : {};
+                            throw new Error(info.lastError || "Printer Bluetooth belum terhubung.");
+                        }
+
+                        this.showToast("BLE Printer Connected");
+                    } else {
+                        const result = await Printer.connectSerialAuto({ baudRate: 9600 });
+                        if (result) this.showToast("Bluetooth COM Connected");
+                        else this.showToast("COM printer tidak dipilih");
                     }
+                } catch (e) {
+                    console.error("[SmartPrint] Connect error:", e);
+                    this.showToast(e && e.message ? e.message : "Gagal menghubungkan printer");
                 }
-            );
+            });
         }
 
-        const connectBLE =
-            document.getElementById("connectBLEBtn");
+        const connectBLE = document.getElementById("connectBLEBtn");
 
         if (connectBLE) {
-            connectBLE.addEventListener(
-                "click",
-                async () => {
-                    try {
-                        const result = await Printer.connect();
-                        if (result) this.showToast("BLE Printer Connected");
-                        else this.showToast("BLE printer tidak terhubung");
-                    } catch (e) {
-                        console.error("BLE Connect Error", e);
-                        this.showToast("Gagal menghubungkan BLE printer");
-                    }
+            connectBLE.addEventListener("click", async () => {
+                try {
+                    const result = await Bluetooth.connectUser();
+                    if (result) this.showToast("BLE Printer Connected");
+                    else this.showToast("Printer Bluetooth belum terhubung");
+                } catch (e) {
+                    console.error("[SmartPrint] BLE Connect error:", e);
+                    this.showToast(e && e.message ? e.message : "Gagal menghubungkan BLE printer");
                 }
-            );
+            });
         }
 
-
-        const print =
-            document.getElementById(
-                "printBtn"
-            );
-
+        const print = document.getElementById("printBtn");
 
         if (print) {
-
-            print.addEventListener(
-                "click",
-                async () => {
-
-                    await this.print();
-
-                }
-            );
-
+            print.addEventListener("click", async () => {
+                await this.print();
+            });
         }
-
     }
-
 
     // ==========================================
     // FILE
@@ -1198,31 +1193,39 @@ class SmartPrint {
                     );
 
 
-                    /* Printer Bluetooth Classic memakai Web Serial.
-                       requestPort() harus tetap berada di jalur langsung
-                       dari klik tombol Print agar user activation browser
-                       tidak hilang. */
+                    const isLabelPrinter = (() => {
+                        try {
+                            return String(
+                                Settings && typeof Settings.get === "function"
+                                    ? Settings.get("printerType", "label")
+                                    : "label"
+                            ).toLowerCase() === "label";
+                        } catch (e) {
+                            return true;
+                        }
+                    })();
+
                     let connected = false;
 
-                    if (
-                        typeof Printer.connectSerialAuto === "function"
-                    ) {
-                        connected =
-                            await Printer.connectSerialAuto({
-                                baudRate: 9600
-                            });
+                    if (isLabelPrinter) {
+                        if (typeof Bluetooth === "undefined" ||
+                            typeof Bluetooth.connectUser !== "function") {
+                            throw new Error("Web Bluetooth Engine tidak tersedia.");
+                        }
+
+                        connected = await Bluetooth.connectUser();
+                    } else if (typeof Printer.connectSerialAuto === "function") {
+                        connected = await Printer.connectSerialAuto({ baudRate: 9600 });
                     } else {
-                        connected =
-                            await Printer.connect();
+                        connected = await Printer.connect();
                     }
 
-
                     if (!connected) {
-
                         throw new Error(
-                            "Printer belum terhubung."
+                            isLabelPrinter
+                                ? "Printer Bluetooth belum terhubung."
+                                : "Printer COM belum terhubung."
                         );
-
                     }
 
                 }
