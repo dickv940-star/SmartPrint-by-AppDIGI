@@ -1252,22 +1252,46 @@ class SmartPrint {
 
             if (!connectionReady) {
 
-                this.showToast(
-                    isLabelPrinter
-                        ? "Pilih printer Bluetooth..."
-                        : "Pilih printer COM..."
-                );
-
                 let connected = false;
 
                 if (isLabelPrinter) {
-                    if (typeof Bluetooth === "undefined" ||
-                        typeof Bluetooth.connectUser !== "function") {
-                        throw new Error("Web Bluetooth Engine tidak tersedia.");
+                    /*
+                     * Label printer dapat memakai BLE ATAU Bluetooth Classic/COM.
+                     * Saat tombol Print ditekan langsung setelah aplikasi ter-install,
+                     * jangan hanya mencoba Web Bluetooth karena printer SPP/Classic
+                     * tidak akan muncul di picker BLE.
+                     *
+                     * Urutan:
+                     * 1. Coba BLE bila tersedia.
+                     * 2. Jika BLE gagal/tidak menemukan perangkat, coba Web Serial/COM.
+                     */
+                    if (typeof Bluetooth !== "undefined" &&
+                        typeof Bluetooth.connectUser === "function") {
+
+                        this.showToast("Mencari printer Bluetooth...");
+
+                        try {
+                            connected = await Bluetooth.connectUser();
+                        } catch (bleError) {
+                            console.warn("[SmartPrint] BLE print connect failed:", bleError);
+                        }
                     }
 
-                    connected = await Bluetooth.connectUser();
+                    if (!connected &&
+                        typeof Printer.connectSerialAuto === "function" &&
+                        typeof navigator !== "undefined" &&
+                        "serial" in navigator) {
+
+                        this.showToast("BLE tidak ditemukan. Pilih COM printer...");
+
+                        try {
+                            connected = await Printer.connectSerialAuto({ baudRate: 9600 });
+                        } catch (serialError) {
+                            console.warn("[SmartPrint] COM print connect failed:", serialError);
+                        }
+                    }
                 } else if (typeof Printer.connectSerialAuto === "function") {
+                    this.showToast("Pilih printer COM...");
                     connected = await Printer.connectSerialAuto({ baudRate: 9600 });
                 } else {
                     connected = await Printer.connect();
@@ -1276,7 +1300,7 @@ class SmartPrint {
                 if (!connected) {
                     throw new Error(
                         isLabelPrinter
-                            ? "Printer Bluetooth belum terhubung."
+                            ? "Printer belum terhubung. Gunakan 'Bluetooth Classic / COM' untuk printer Bluetooth Classic, atau 'Connect Printer' untuk BLE."
                             : "Printer COM belum terhubung."
                     );
                 }
