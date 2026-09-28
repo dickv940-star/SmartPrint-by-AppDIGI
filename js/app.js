@@ -1252,45 +1252,26 @@ class SmartPrint {
 
             if (!connectionReady) {
 
+                /*
+                 * JANGAN membuka Bluetooth BLE picker secara otomatis saat Print.
+                 *
+                 * Banyak printer label Bluetooth adalah Bluetooth Classic/SPP
+                 * dan tampil sebagai COM di Windows. Perangkat seperti ini memang
+                 * TIDAK akan muncul di Web Bluetooth picker.
+                 *
+                 * User harus memilih transport yang benar:
+                 * - BLE printer  -> Connect Printer
+                 * - Bluetooth Classic/SPP -> Bluetooth Classic / COM
+                 */
+                if (isLabelPrinter) {
+                    throw new Error(
+                        "Printer belum terhubung. Untuk printer Bluetooth Classic/SPP, klik 'Bluetooth Classic / COM' lalu pilih COM printer. Jika printer memang BLE, klik 'Connect Printer'."
+                    );
+                }
+
                 let connected = false;
 
-                if (isLabelPrinter) {
-                    /*
-                     * Label printer dapat memakai BLE ATAU Bluetooth Classic/COM.
-                     * Saat tombol Print ditekan langsung setelah aplikasi ter-install,
-                     * jangan hanya mencoba Web Bluetooth karena printer SPP/Classic
-                     * tidak akan muncul di picker BLE.
-                     *
-                     * Urutan:
-                     * 1. Coba BLE bila tersedia.
-                     * 2. Jika BLE gagal/tidak menemukan perangkat, coba Web Serial/COM.
-                     */
-                    if (typeof Bluetooth !== "undefined" &&
-                        typeof Bluetooth.connectUser === "function") {
-
-                        this.showToast("Mencari printer Bluetooth...");
-
-                        try {
-                            connected = await Bluetooth.connectUser();
-                        } catch (bleError) {
-                            console.warn("[SmartPrint] BLE print connect failed:", bleError);
-                        }
-                    }
-
-                    if (!connected &&
-                        typeof Printer.connectSerialAuto === "function" &&
-                        typeof navigator !== "undefined" &&
-                        "serial" in navigator) {
-
-                        this.showToast("BLE tidak ditemukan. Pilih COM printer...");
-
-                        try {
-                            connected = await Printer.connectSerialAuto({ baudRate: 9600 });
-                        } catch (serialError) {
-                            console.warn("[SmartPrint] COM print connect failed:", serialError);
-                        }
-                    }
-                } else if (typeof Printer.connectSerialAuto === "function") {
+                if (typeof Printer.connectSerialAuto === "function") {
                     this.showToast("Pilih printer COM...");
                     connected = await Printer.connectSerialAuto({ baudRate: 9600 });
                 } else {
@@ -1298,11 +1279,7 @@ class SmartPrint {
                 }
 
                 if (!connected) {
-                    throw new Error(
-                        isLabelPrinter
-                            ? "Printer belum terhubung. Gunakan 'Bluetooth Classic / COM' untuk printer Bluetooth Classic, atau 'Connect Printer' untuk BLE."
-                            : "Printer COM belum terhubung."
-                    );
+                    throw new Error("Printer COM belum terhubung.");
                 }
             }
 
