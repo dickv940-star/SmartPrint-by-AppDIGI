@@ -2,13 +2,13 @@
 =================================================
  SmartPrint by AppDIGI
  Service Worker
- Version 7.2
+ Version 7.3
 =================================================
 */
 
 "use strict";
 
-const CACHE_NAME = "smartprint-v7.2";
+const CACHE_NAME = "smartprint-v7.3";
 
 const APP_FILES = [
     "./",
