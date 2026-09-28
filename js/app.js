@@ -345,6 +345,32 @@ class SmartPrint {
             });
         }
 
+        // Fallback untuk printer thermal Bluetooth Classic (SPP) yang muncul sebagai COM.
+        const connectCOM = document.getElementById("connectCOMBtn");
+
+        if (connectCOM) {
+            connectCOM.addEventListener("click", async () => {
+                try {
+                    if (typeof Printer === "undefined" ||
+                        typeof Printer.connectSerialAuto !== "function") {
+                        throw new Error("Web Serial / Bluetooth COM tidak tersedia.");
+                    }
+
+                    this.showToast("Pilih COM printer Bluetooth...");
+                    const result = await Printer.connectSerialAuto({ baudRate: 9600 });
+
+                    if (!result) {
+                        throw new Error("COM printer tidak dipilih.");
+                    }
+
+                    this.showToast("Bluetooth Classic / COM Connected");
+                } catch (e) {
+                    console.error("[SmartPrint] COM fallback error:", e);
+                    this.showToast(e && e.message ? e.message : "Gagal menghubungkan COM printer");
+                }
+            });
+        }
+
         const connectBLE = document.getElementById("connectBLEBtn");
 
         if (connectBLE) {
@@ -1197,18 +1223,21 @@ class SmartPrint {
              * Never let an already-open COM port satisfy a label
              * printer connection check.
              */
+            // Label printer mendukung BLE maupun Bluetooth Classic/COM.
+            // COM tidak lagi dianggap salah hanya karena printer type = label.
             const connectionReady = isLabelPrinter
                 ? (
-                    typeof Bluetooth !== "undefined" &&
                     (
+                        typeof Bluetooth !== "undefined" &&
                         (
-                            typeof Bluetooth.isBLEConnected === "function" &&
-                            Bluetooth.isBLEConnected()
-                        ) ||
-                        (
-                            typeof Bluetooth.getConnectionType === "function" &&
-                            Bluetooth.getConnectionType() === "BLE"
+                            (typeof Bluetooth.isBLEConnected === "function" && Bluetooth.isBLEConnected()) ||
+                            (typeof Bluetooth.getConnectionType === "function" && Bluetooth.getConnectionType() === "BLE")
                         )
+                    ) ||
+                    (
+                        typeof Printer !== "undefined" &&
+                        typeof Printer.isConnected === "function" &&
+                        Printer.isConnected()
                     )
                 )
                 : (
