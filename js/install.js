@@ -29,7 +29,7 @@ let deferredPrompt = null;
 // =====================================================
 // INIT
 // =====================================================
-console.log("INSTALL: Install Manager Ready v5.2");
+console.log("INSTALL: Install Manager Ready v5.3");
 
 // =====================================================
 // BEFORE INSTALL PROMPT
