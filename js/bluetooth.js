@@ -314,6 +314,11 @@
     }
 
 
+    function isBLEConnectedPublic() {
+        return isBLEConnected();
+    }
+
+
     function isConnected() {
 
         if (isBLEConnected()) {
@@ -3707,6 +3712,7 @@
         testRaw: testRaw,
 
         isConnected: isConnected,
+        isBLEConnected: isBLEConnectedPublic,
 
         getDevice: getDevice,
 
