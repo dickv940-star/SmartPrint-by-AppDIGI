@@ -356,11 +356,16 @@ class SmartPrint {
                         throw new Error("Web Serial / Bluetooth COM tidak tersedia.");
                     }
 
+                    if (!("serial" in navigator)) {
+                        throw new Error("Web Serial tidak tersedia. Gunakan Google Chrome/Edge di Windows untuk koneksi Bluetooth Classic/COM.");
+                    }
+
                     this.showToast("Pilih COM printer Bluetooth...");
                     const result = await Printer.connectSerialAuto({ baudRate: 9600 });
 
                     if (!result) {
-                        throw new Error("COM printer tidak dipilih.");
+                        const info = typeof Printer.getStatus === "function" ? Printer.getStatus() : {};
+                        throw new Error(info.lastError || "COM printer tidak dipilih atau gagal dibuka.");
                     }
 
                     this.showToast("Bluetooth Classic / COM Connected");
