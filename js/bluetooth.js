@@ -634,13 +634,8 @@
             selected =
 
                 await navigator.bluetooth.requestDevice({
-
                     acceptAllDevices: true,
-
-                    optionalServices:
-
-                        CONFIG.optionalServices
-
+                    optionalServices: CONFIG.optionalServices
                 });
 
         }
