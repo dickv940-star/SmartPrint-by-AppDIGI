@@ -1,6 +1,6 @@
 /*
 =========================================================
- SmartPrint Bluetooth Engine v6.2.0
+ SmartPrint Bluetooth Engine v6.3.1
  Universal BLE Thermal Printer Transport
 =========================================================
 
@@ -37,7 +37,7 @@
 
     "use strict";
 
-    const VERSION = "6.3.0";
+    const VERSION = "6.3.1";
 
     let device = null;
     let server = null;
@@ -656,23 +656,20 @@
 
             ) {
 
-                log(
+                const reason =
+                    err.name === "AbortError"
+                        ? "Pemilihan Bluetooth dibatalkan."
+                        : "Tidak ada printer BLE yang dipilih.";
 
-                    "Bluetooth picker dibatalkan pengguna."
-
-                );
-
+                log(reason, err.name, err.message || "");
 
                 dispatch(
-
                     "cancelled",
-
                     {
-
-                        error: err
-
+                        error: err,
+                        name: err.name,
+                        message: reason
                     }
-
                 );
 
             }
@@ -1302,32 +1299,27 @@
 
         catch (err) {
 
-            if (
-
-                err &&
-
-                (
-
-                    err.name === "NotFoundError" ||
-
-                    err.name === "AbortError"
-
-                )
-
-            ) {
-
+            if (err && err.name === "AbortError") {
+                log("BLE picker dibatalkan.", err);
+                dispatch("cancelled", {
+                    error: err,
+                    name: err.name,
+                    message: "Pemilihan Bluetooth dibatalkan."
+                });
                 return false;
-
             }
 
+            if (err && err.name === "NotFoundError") {
+                log("Tidak ada printer BLE yang dipilih.", err);
+                dispatch("cancelled", {
+                    error: err,
+                    name: err.name,
+                    message: "Tidak ada printer BLE yang dipilih."
+                });
+                return false;
+            }
 
-            error(
-
-                "BLE connection error:",
-
-                err
-
-            );
+            error("BLE connection error:", err);
 
 
             dispatch(
