@@ -1,8 +1,8 @@
 /*
 =========================================================
  SmartPrint by AppDIGI
- PWA Install Manager
- Version 5.1
+ PWA Install Manager + BLE DIRECT USER-GESTURE FIX
+ Version 5.2
 =========================================================
 */
 
@@ -10,17 +10,16 @@
 
 let deferredPrompt = null;
 
-// =====================================================
-// LABEL PRINTER CONNECTION FIX
-// =====================================================
-// Label printer menggunakan Bluetooth BLE. Sebelumnya
-// Print/Connect memanggil Web Serial/COM terlebih dahulu.
-// Chrome dapat mengembalikan "An unknown system error has
-// occurred" ketika COM/Bluetooth SPP gagal dibuka.
-// Untuk mode Label Printer, gunakan Web Bluetooth picker.
-// Receipt printer tetap menggunakan Web Serial.
-// =====================================================
-(function installLabelBluetoothFix() {
+/* =====================================================
+   LABEL BLE DIRECT CONNECTION
+   =====================================================
+   IMPORTANT:
+   navigator.bluetooth.requestDevice() must be reached from
+   the real user gesture. The old flow went through the Print
+   handler and Web Serial first, which could prevent the BLE
+   chooser from appearing in the installed PWA.
+*/
+(function installDirectBLEFlow() {
 
     function isLabelPrinter() {
         try {
@@ -31,91 +30,151 @@ let deferredPrompt = null;
         return true;
     }
 
-    function patchPrinter() {
-        if (!window.Printer || typeof Printer.connectSerialAuto !== "function") {
-            return false;
-        }
-
-        if (Printer.__smartPrintBleFirstPatched) {
-            return true;
-        }
-
-        const originalConnectSerialAuto = Printer.connectSerialAuto.bind(Printer);
-
-        Printer.connectSerialAuto = async function (options) {
-            if (!isLabelPrinter()) {
-                return originalConnectSerialAuto(options || {});
-            }
-
-            if (!navigator.bluetooth || typeof navigator.bluetooth.requestDevice !== "function") {
-                throw new Error(
-                    "Web Bluetooth tidak tersedia. Buka SmartPrint menggunakan Google Chrome/Edge dan pastikan Bluetooth aktif."
-                );
-            }
-
-            console.log("[SmartPrint] Label Printer: memakai Web Bluetooth, bukan COM/Serial.");
-
-            const connected = await Printer.connect();
-            return !!connected;
-        };
-
-        Printer.__smartPrintBleFirstPatched = true;
-        console.log("[SmartPrint] BLE-first label printer connection enabled.");
-        return true;
+    function hasBLE() {
+        return !!(
+            navigator.bluetooth &&
+            typeof navigator.bluetooth.requestDevice === "function"
+        );
     }
 
-    patchPrinter();
-    window.addEventListener("DOMContentLoaded", patchPrinter, { once: true });
+    async function connectBLEFromGesture() {
+        if (!hasBLE()) {
+            throw new Error(
+                "Web Bluetooth tidak tersedia. Gunakan Google Chrome/Edge dan aktifkan Bluetooth Windows."
+            );
+        }
+
+        /* Call directly from the user gesture. */
+        if (window.Bluetooth && typeof Bluetooth.connectUser === "function") {
+            return !!(await Bluetooth.connectUser());
+        }
+
+        if (window.Printer && typeof Printer.connect === "function") {
+            return !!(await Printer.connect());
+        }
+
+        throw new Error("Bluetooth Engine SmartPrint tidak tersedia.");
+    }
+
+    async function handleConnectClick(event) {
+        if (!isLabelPrinter()) return;
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+
+        try {
+            console.log("[SmartPrint BLE] Connect button -> direct BLE picker");
+            const result = await connectBLEFromGesture();
+            if (window.App && typeof App.showToast === "function") {
+                App.showToast(result ? "BLE Printer Connected" : "Printer tidak terhubung");
+            }
+        } catch (e) {
+            console.error("[SmartPrint BLE] Connect error:", e);
+            alert(e && e.message ? e.message : "Gagal menghubungkan printer Bluetooth.");
+        }
+    }
+
+    async function handlePrintClick(event) {
+        if (!isLabelPrinter()) return;
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+
+        try {
+            if (!window.Printer) {
+                throw new Error("Printer Manager tidak tersedia.");
+            }
+
+            /*
+             * Start BLE permission flow immediately from this click.
+             * Do not call Web Serial/COM first.
+             */
+            if (!Printer.isConnected || !Printer.isConnected()) {
+                if (window.App && typeof App.showToast === "function") {
+                    App.showToast("Pilih printer Bluetooth...");
+                }
+
+                const connected = await connectBLEFromGesture();
+                if (!connected) {
+                    throw new Error("Printer Bluetooth belum terhubung.");
+                }
+            }
+
+            const canvas =
+                window.Preview && typeof Preview.getCanvas === "function"
+                    ? Preview.getCanvas()
+                    : null;
+
+            if (!canvas) {
+                throw new Error("Preview belum siap.");
+            }
+
+            await Printer.print(canvas);
+
+            if (window.App && typeof App.showToast === "function") {
+                App.showToast("Print berhasil");
+            }
+        } catch (e) {
+            console.error("[SmartPrint BLE] Print error:", e);
+            alert(e && e.message ? e.message : "Print gagal.");
+        }
+    }
+
+    function installHandlers() {
+        const connect = document.getElementById("connectBtn");
+        const print = document.getElementById("printBtn");
+
+        /* Capture phase runs before the old app.js click handler. */
+        if (connect && !connect.__smartprintDirectBLE) {
+            connect.addEventListener("click", handleConnectClick, true);
+            connect.__smartprintDirectBLE = true;
+        }
+
+        if (print && !print.__smartprintDirectBLE) {
+            print.addEventListener("click", handlePrintClick, true);
+            print.__smartprintDirectBLE = true;
+        }
+
+        console.log("[SmartPrint BLE] Direct user-gesture BLE flow ready.");
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", installHandlers, { once: true });
+    } else {
+        installHandlers();
+    }
 })();
 
 // =====================================================
 // INIT
 // =====================================================
-console.log("INSTALL: Install Manager Ready");
+console.log("INSTALL: Install Manager Ready v5.2");
 
 // =====================================================
 // BEFORE INSTALL PROMPT
 // =====================================================
 window.addEventListener("beforeinstallprompt", (event) => {
-    console.log("INSTALL: beforeinstallprompt tersedia.");
     event.preventDefault();
     deferredPrompt = event;
 
     const installBtn = document.getElementById("installBtn");
-    if (!installBtn) {
-        console.error("INSTALL: installBtn tidak ditemukan.");
-        return;
-    }
+    if (!installBtn) return;
 
     installBtn.hidden = false;
     installBtn.style.display = "block";
-    console.log("INSTALL: Tombol Install ditampilkan.");
 });
 
 // =====================================================
-// DOM READY
+// INSTALL BUTTON
 // =====================================================
 document.addEventListener("DOMContentLoaded", () => {
     const installBtn = document.getElementById("installBtn");
-
-    if (!installBtn) {
-        console.error("INSTALL: installBtn tidak ditemukan.");
-        return;
-    }
-
-    console.log("INSTALL: Tombol siap digunakan.");
+    if (!installBtn) return;
 
     installBtn.addEventListener("click", async () => {
-        console.log("INSTALL: Tombol diklik.");
-
-        if (!deferredPrompt) {
-            console.warn("INSTALL: Prompt tidak tersedia.");
-            return;
-        }
+        if (!deferredPrompt) return;
 
         deferredPrompt.prompt();
-        console.log("INSTALL: Install prompt ditampilkan.");
-
         const result = await deferredPrompt.userChoice;
         console.log("INSTALL: User Choice =", result.outcome);
 
@@ -125,9 +184,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 });
 
-// =====================================================
-// APP INSTALLED
-// =====================================================
 window.addEventListener("appinstalled", () => {
     console.log("INSTALL: SmartPrint berhasil di-install.");
     deferredPrompt = null;
