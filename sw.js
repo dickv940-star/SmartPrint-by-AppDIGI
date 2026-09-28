@@ -2,13 +2,13 @@
 =================================================
  SmartPrint by AppDIGI
  Service Worker
- Version 7.3
+ Version 7.4
 =================================================
 */
 
 "use strict";
 
-const CACHE_NAME = "smartprint-v7.3";
+const CACHE_NAME = "smartprint-v7.4";
 
 const APP_FILES = [
     "./",
@@ -61,20 +61,15 @@ self.addEventListener("fetch", event => {
     if (event.request.method !== "GET") return;
 
     const url = new URL(event.request.url);
-    const isAppCode =
+    const isAppCode = url.pathname.endsWith(".js") ||
         url.pathname.endsWith("/index.html") ||
-        url.pathname.endsWith("/install.js") ||
-        url.pathname.endsWith("/bluetooth.js") ||
-        url.pathname.endsWith("/printer.js") ||
-        url.pathname.endsWith("/app.js") ||
-        url.pathname.endsWith("/settings.js") ||
         url.pathname.endsWith("/sw.js");
 
-    /* Always try network first for application code so the installed
-       PWA receives the latest Bluetooth fix after a deployment. */
+    /* Application code must be network-first so installed PWA sessions
+       do not keep an older printer/Bluetooth implementation. */
     if (isAppCode) {
         event.respondWith(
-            fetch(event.request)
+            fetch(event.request, { cache: "no-store" })
                 .then(response => {
                     if (response && response.ok) {
                         const copy = response.clone();
