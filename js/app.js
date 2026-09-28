@@ -1179,57 +1179,65 @@ class SmartPrint {
             // CHECK CONNECTION
             // ======================================
 
-            if (
-                typeof Printer.isConnected ===
-                "function"
-            ) {
+            const isLabelPrinter = (() => {
+                try {
+                    return String(
+                        Settings && typeof Settings.get === "function"
+                            ? Settings.get("printerType", "label")
+                            : "label"
+                    ).toLowerCase() === "label";
+                } catch (e) {
+                    return true;
+                }
+            })();
 
-                if (
-                    !Printer.isConnected()
-                ) {
+            /*
+             * Label printer = BLE only.
+             * Receipt/COM printer = Web Serial only.
+             * Never let an already-open COM port satisfy a label
+             * printer connection check.
+             */
+            const connectionReady = isLabelPrinter
+                ? (
+                    typeof Bluetooth !== "undefined" &&
+                    typeof Bluetooth.isConnected === "function" &&
+                    Bluetooth.isConnected()
+                )
+                : (
+                    typeof Printer.isConnected === "function" &&
+                    Printer.isConnected()
+                );
 
-                    this.showToast(
-                        "Menghubungkan printer..."
-                    );
+            if (!connectionReady) {
 
+                this.showToast(
+                    isLabelPrinter
+                        ? "Pilih printer Bluetooth..."
+                        : "Pilih printer COM..."
+                );
 
-                    const isLabelPrinter = (() => {
-                        try {
-                            return String(
-                                Settings && typeof Settings.get === "function"
-                                    ? Settings.get("printerType", "label")
-                                    : "label"
-                            ).toLowerCase() === "label";
-                        } catch (e) {
-                            return true;
-                        }
-                    })();
+                let connected = false;
 
-                    let connected = false;
-
-                    if (isLabelPrinter) {
-                        if (typeof Bluetooth === "undefined" ||
-                            typeof Bluetooth.connectUser !== "function") {
-                            throw new Error("Web Bluetooth Engine tidak tersedia.");
-                        }
-
-                        connected = await Bluetooth.connectUser();
-                    } else if (typeof Printer.connectSerialAuto === "function") {
-                        connected = await Printer.connectSerialAuto({ baudRate: 9600 });
-                    } else {
-                        connected = await Printer.connect();
+                if (isLabelPrinter) {
+                    if (typeof Bluetooth === "undefined" ||
+                        typeof Bluetooth.connectUser !== "function") {
+                        throw new Error("Web Bluetooth Engine tidak tersedia.");
                     }
 
-                    if (!connected) {
-                        throw new Error(
-                            isLabelPrinter
-                                ? "Printer Bluetooth belum terhubung."
-                                : "Printer COM belum terhubung."
-                        );
-                    }
-
+                    connected = await Bluetooth.connectUser();
+                } else if (typeof Printer.connectSerialAuto === "function") {
+                    connected = await Printer.connectSerialAuto({ baudRate: 9600 });
+                } else {
+                    connected = await Printer.connect();
                 }
 
+                if (!connected) {
+                    throw new Error(
+                        isLabelPrinter
+                            ? "Printer Bluetooth belum terhubung."
+                            : "Printer COM belum terhubung."
+                    );
+                }
             }
 
 
