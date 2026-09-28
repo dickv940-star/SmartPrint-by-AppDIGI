@@ -1200,8 +1200,16 @@ class SmartPrint {
             const connectionReady = isLabelPrinter
                 ? (
                     typeof Bluetooth !== "undefined" &&
-                    typeof Bluetooth.isConnected === "function" &&
-                    Bluetooth.isConnected()
+                    (
+                        (
+                            typeof Bluetooth.isBLEConnected === "function" &&
+                            Bluetooth.isBLEConnected()
+                        ) ||
+                        (
+                            typeof Bluetooth.getConnectionType === "function" &&
+                            Bluetooth.getConnectionType() === "BLE"
+                        )
+                    )
                 )
                 : (
                     typeof Printer.isConnected === "function" &&
